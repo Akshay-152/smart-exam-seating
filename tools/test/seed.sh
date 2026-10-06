@@ -2,6 +2,19 @@
 # Seeds the baseline test data used by cdp-test.mjs against a running instance.
 B=${1:-http://localhost:8081/api}
 
+# --- reset existing data so the baseline is identical on every run ---
+delete_all() {
+  ids=$(curl -s "$B/$1" | python -c "import sys,json
+try:
+    d=json.load(sys.stdin); print(' '.join(str(x['id']) for x in d))
+except Exception:
+    print('')")
+  for id in $ids; do curl -s -X DELETE "$B/$1/$id" -o /dev/null; done
+}
+delete_all exams
+delete_all rooms
+delete_all students
+
 for s in '101|Ananya Sharma|CSE|S3' '102|Rahul|ECE|S3' '103|Priya Sharma|CSE|s3' '104|Karthik|MECH|S3'; do
   IFS='|' read -r r n c m <<< "$s"
   curl -s -X POST "$B/students" -H 'Content-Type: application/json' \

@@ -96,6 +96,7 @@ public class AllocationController {
         existing.setCapacity(room.getCapacity());
         existing.setRowsCount(room.getRowsCount());
         existing.setColumnsCount(room.getColumnsCount());
+        existing.setStudentsPerDesk(room.getStudentsPerDesk());
         return roomRepository.save(existing);
     }
 

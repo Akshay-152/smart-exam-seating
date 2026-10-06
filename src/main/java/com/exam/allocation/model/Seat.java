@@ -15,6 +15,10 @@ public class Seat {
     @Column(nullable = false)
     private int columnNumber;
 
+    /** Which student position at the desk (1..studentsPerDesk); desks can seat several students. */
+    @Column(nullable = false)
+    private int deskPosition = 1;
+
     @ManyToOne
     @JoinColumn(name = "room_id")
     private Room room;
@@ -41,6 +45,9 @@ public class Seat {
 
     public int getColumnNumber() { return columnNumber; }
     public void setColumnNumber(int columnNumber) { this.columnNumber = columnNumber; }
+
+    public int getDeskPosition() { return deskPosition; }
+    public void setDeskPosition(int deskPosition) { this.deskPosition = deskPosition; }
 
     public Room getRoom() { return room; }
     public void setRoom(Room room) { this.room = room; }

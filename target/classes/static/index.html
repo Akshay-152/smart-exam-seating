@@ -193,6 +193,15 @@
         .seat span { font-size: .7rem; color: #374151; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .seat em { font-style: normal; font-size: .6rem; color: white; border-radius: 999px; padding: 0 .45rem; }
         .seat.vacant { background: #F3F4F6; color: #9CA3AF; font-size: .72rem; border-style: dashed; }
+        .seat.multi { justify-content: flex-start; gap: 3px; padding: 4px; }
+        .slot {
+            display: flex; gap: 5px; align-items: center; width: 100%;
+            background: #F9FAFB; border-radius: 4px; padding: 3px 5px;
+            font-size: .7rem; overflow: hidden;
+        }
+        .slot b { font-size: .72rem; }
+        .slot span { color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .slot.empty { background: transparent; border: 1px dashed #D1D5DB; color: #9CA3AF; justify-content: center; font-size: .66rem; }
         .legend { display: flex; gap: 1rem; flex-wrap: wrap; margin: .4rem 0 1rem; font-size: .8rem; }
         .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: .35rem; }
         .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
@@ -314,14 +323,16 @@
             <h3>Manage Rooms</h3>
             <form id="room-form" class="form-row" autocomplete="off">
                 <div class="field"><label>Room Number</label><input id="r-no" enterkeyhint="next" placeholder="e.g. 121"></div>
-                <div class="field"><label>Rows</label><input id="r-rows" type="number" min="1" enterkeyhint="next" placeholder="5"></div>
-                <div class="field"><label>Columns</label><input id="r-cols" type="number" min="1" enterkeyhint="next" placeholder="3"></div>
-                <div class="field"><label>Capacity</label><input id="r-cap" type="number" min="0" enterkeyhint="go" placeholder="auto"></div>
+                <div class="field"><label>Desks</label><input id="r-desks" data-k="desks" type="number" min="1" enterkeyhint="next" placeholder="e.g. 12"></div>
+                <div class="field"><label>Students / Desk</label><input id="r-per" data-k="per" type="number" min="1" enterkeyhint="next" value="1"></div>
+                <div class="field"><label>Rows</label><input id="r-rows" data-k="rows" type="number" min="1" enterkeyhint="next" placeholder="auto"></div>
+                <div class="field"><label>Columns</label><input id="r-cols" data-k="cols" type="number" min="1" enterkeyhint="next" placeholder="auto"></div>
+                <div class="field"><label>Capacity</label><input id="r-cap" data-k="cap" type="number" min="0" enterkeyhint="go" placeholder="auto"></div>
                 <button type="button" class="btn btn-success" onclick="addRoom()">Add Room</button>
             </form>
-            <div class="hint">Capacity defaults to rows &times; columns when left empty.</div>
+            <div class="hint">Type <b>Desks</b> and rows/columns are auto-predicted (12 desks &rarr; 3 &times; 4); or type rows/columns and desks is derived. <b>Capacity = desks &times; students per desk</b> (auto-filled, still editable).</div>
             <table>
-                <thead><tr><th>Room No</th><th>Rows</th><th>Columns</th><th>Capacity</th><th>Seats</th><th class="actions no-print">Actions</th></tr></thead>
+                <thead><tr><th>Room No</th><th>Rows</th><th>Columns</th><th>Desks</th><th>Students/Desk</th><th>Capacity</th><th class="actions no-print">Actions</th></tr></thead>
                 <tbody id="room-list"></tbody>
             </table>
         </div>
@@ -589,18 +600,20 @@
     function renderRooms() {
         const tbody = $('room-list');
         if (!rooms.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty">No rooms yet. Add the first exam room above.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">No rooms yet. Add the first exam room above.</td></tr>';
             return;
         }
         tbody.innerHTML = rooms.map(r => {
-            const seats = r.rowsCount * r.columnsCount;
+            const per = r.studentsPerDesk || 1;
+            const desks = r.rowsCount * r.columnsCount;
             if (editingRoomId === r.id) {
                 return `<tr data-edit data-id="${r.id}">
                     <td><input data-f="roomNumber" value="${esc(r.roomNumber)}" placeholder="Room No"></td>
-                    <td><input data-f="rowsCount" type="number" min="1" value="${r.rowsCount}"></td>
-                    <td><input data-f="columnsCount" type="number" min="1" value="${r.columnsCount}"></td>
-                    <td><input data-f="capacity" type="number" min="0" value="${r.capacity}"></td>
-                    <td>${seats}</td>
+                    <td><input data-f="rowsCount" data-k="rows" type="number" min="1" value="${r.rowsCount}"></td>
+                    <td><input data-f="columnsCount" data-k="cols" type="number" min="1" value="${r.columnsCount}"></td>
+                    <td><input data-f="desks" data-k="desks" type="number" min="1" value="${desks}"></td>
+                    <td><input data-f="studentsPerDesk" data-k="per" type="number" min="1" value="${per}"></td>
+                    <td><input data-f="capacity" data-k="cap" type="number" min="0" value="${r.capacity}" data-auto="${desks * per}"></td>
                     <td class="actions no-print">
                         <button class="btn btn-sm btn-success" data-act="save" data-id="${r.id}">Save</button>
                         <button class="btn btn-sm btn-ghost" data-act="cancel" data-id="${r.id}">Cancel</button>
@@ -610,34 +623,106 @@
                 <td><b>${esc(r.roomNumber)}</b></td>
                 <td>${r.rowsCount}</td>
                 <td>${r.columnsCount}</td>
+                <td>${desks}</td>
+                <td>${per}</td>
                 <td>${r.capacity}</td>
-                <td>${seats}</td>
                 <td class="actions no-print">
                     <button class="btn btn-sm btn-ghost" data-act="edit" data-id="${r.id}">Edit</button>
                     <button class="btn btn-sm btn-danger" data-act="delete" data-id="${r.id}">Delete</button>
                 </td></tr>`;
         }).join('');
     }
-    function roomCapacity() {
-        const rows = parseInt($('r-rows').value, 10);
-        const cols = parseInt($('r-cols').value, 10);
-        return (rows > 0 && cols > 0) ? rows * cols : 0;
+
+    /** Balanced grid for a desk count:12 desks -> 3 rows x 4 cols (cols >= rows, closest to square). */
+    function predictGrid(desks) {
+        if (!desks || desks < 1) return null;
+        let best = null;
+        for (let r = 1; r * r <= desks; r++) {
+            if (desks % r === 0) {
+                const c = desks / r;
+                if (!best || (c - r) < (best[1] - best[0])) best = [r, c];
+            }
+        }
+        return best;
     }
+
+    /**
+     * Two-way room calculator: type Desks -> rows/columns are predicted;
+     * type rows/columns -> desks is derived; capacity auto-fills with
+     * desks x students-per-desk (unless it was manually overridden).
+     */
+    function refreshRoomMath(scope, changed) {
+        const get = k => scope.querySelector(`[data-k="${k}"]`);
+        const rowsEl = get('rows'), colsEl = get('cols'), desksEl = get('desks');
+        if (!rowsEl || !colsEl || !desksEl) return;
+        let rows = Number(rowsEl.value) || 0;
+        let cols = Number(colsEl.value) || 0;
+        let desks = Number(desksEl.value) || 0;
+
+        if (changed === 'desks') {
+            if (desks > 0) {
+                const g = predictGrid(desks);
+                if (g) { rows = g[0]; cols = g[1]; rowsEl.value = rows; colsEl.value = cols; }
+            } else if (rows > 0 && cols > 0) {
+                desks = rows * cols;
+                desksEl.value = desks;
+            }
+        } else if (changed === 'rows' || changed === 'cols') {
+            if (rows > 0 && cols > 0) {
+                desks = rows * cols;
+                desksEl.value = desks;
+            }
+        }
+
+        const perEl = get('per');
+        const per = (perEl ? Number(perEl.value) : 0) || 1;
+        const auto = (rows > 0 && cols > 0 ? rows * cols : desks) * per;
+        const capEl = get('cap');
+        if (capEl && auto > 0) {
+            const current = Number(capEl.value) || 0;
+            const tracked = Number(capEl.dataset.auto) || 0;
+            if (current === 0 || current === tracked) {
+                capEl.value = auto;
+                capEl.dataset.auto = String(auto);
+            }
+        }
+    }
+    document.addEventListener('input', e => {
+        const k = e.target.dataset && e.target.dataset.k;
+        if (!k) return;
+        const scope = e.target.closest('tr[data-edit]') || e.target.closest('#room-form');
+        if (scope) refreshRoomMath(scope, k);
+    });
+
     async function addRoom() {
-        const rows = parseInt($('r-rows').value, 10);
-        const cols = parseInt($('r-cols').value, 10);
+        const form = $('room-form');
+        const val = k => Number(form.querySelector(`[data-k="${k}"]`).value) || 0;
+        let rows = val('rows'), cols = val('cols'), desks = val('desks');
+        const per = val('per') || 1;
+
+        // Desks typed but rows/columns not yet: predict the balanced grid.
+        if ((!rows || !cols) && desks > 0) {
+            const g = predictGrid(desks);
+            if (g) { rows = g[0]; cols = g[1]; }
+        }
+        if (rows > 0 && cols > 0) desks = rows * cols;
+        if (!rows || !cols) { rows = rows || 1; cols = cols || 1; desks = rows * cols; }
+
         const payload = {
             roomNumber: $('r-no').value.trim() || null,
-            rowsCount: rows || 1,
-            columnsCount: cols || 1,
-            capacity: parseInt($('r-cap').value, 10) || roomCapacity() || rows * cols || 1
+            rowsCount: rows,
+            columnsCount: cols,
+            studentsPerDesk: per,
+            capacity: Number($('r-cap').value) || desks * per
         };
         if (!payload.roomNumber) { toast('Enter a room number.', true); $('r-no').focus(); return; }
         try {
             await api('/api/rooms', jsonOpts('POST', payload));
-            ['r-no', 'r-rows', 'r-cols', 'r-cap'].forEach(id => $(id).value = '');
+            ['r-no', 'r-rows', 'r-cols', 'r-desks', 'r-cap'].forEach(id => $(id).value = '');
+            $('r-per').value = '1';
+            delete $('r-cap').dataset.auto;
             $('r-no').focus();
-            toast('Room added.');
+            toast(`Room added: ${rows} x ${cols} desks, capacity ${payload.capacity}.`);
             await loadRooms();
         } catch (e) { toast(e.message, true); }
     }
@@ -650,11 +735,13 @@
             else if (btn.dataset.act === 'cancel') { editingRoomId = null; renderRooms(); }
             else if (btn.dataset.act === 'save') {
                 const row = btn.closest('tr[data-edit]');
+                const num = f => Number(row.querySelector(`[data-f="${f}"]`).value) || 0;
                 const payload = {
                     roomNumber: (row.querySelector('[data-f="roomNumber"]').value || '').trim() || null,
-                    rowsCount: Number(row.querySelector('[data-f="rowsCount"]').value) || 1,
-                    columnsCount: Number(row.querySelector('[data-f="columnsCount"]').value) || 1,
-                    capacity: Number(row.querySelector('[data-f="capacity"]').value) || 0
+                    rowsCount: num('rowsCount') || 1,
+                    columnsCount: num('columnsCount') || 1,
+                    studentsPerDesk: num('studentsPerDesk') || 1,
+                    capacity: num('capacity') || 0
                 };
                 await api('/api/rooms/' + id, jsonOpts('PUT', payload));
                 editingRoomId = null;
@@ -872,30 +959,55 @@
         });
 
         let html = '';
+        let deskTotal = 0;
         for (const group of groups.values()) {
             const room = group.room || {};
             const cols = room.columnsCount || Math.max(...group.seats.map(s => s.columnNumber));
             const rows = room.rowsCount || Math.max(...group.seats.map(s => s.rowNumber));
-            const map = new Map(group.seats.map(s => [s.rowNumber + ':' + s.columnNumber, s]));
+            const map = new Map();
+            group.seats.forEach(s => {
+                const key = s.rowNumber + ':' + s.columnNumber;
+                if (!map.has(key)) map.set(key, []);
+                map.get(key).push(s);
+            });
+            map.forEach(arr => arr.sort((a, b) => (a.deskPosition || 1) - (b.deskPosition || 1)));
+            deskTotal += map.size;
+            const per = Math.max(...[...map.values()].map(a => a.length));
+            const deskLabel = `${rows} &times; ${cols} &middot; ${map.size} desks`
+                + (per > 1 ? ` &middot; ${per} students per desk` : '');
             html += `<div class="room-block">
-                <div class="room-title">Room ${esc(room.roomNumber)} <span>${rows} &times; ${cols} &middot; ${group.seats.length} seats</span></div>
+                <div class="room-title">Room ${esc(room.roomNumber)} <span>${deskLabel}</span></div>
                 <div class="grid-scroll"><div class="seat-grid" style="grid-template-columns:36px repeat(${cols}, minmax(84px,1fr))">
                 <div class="corner"></div>`;
             for (let c = 1; c <= cols; c++) html += `<div class="col-label">C${c}</div>`;
             for (let r = 1; r <= rows; r++) {
                 html += `<div class="row-label">R${r}</div>`;
                 for (let c = 1; c <= cols; c++) {
-                    const seat = map.get(r + ':' + c);
-                    const stu = seat && seat.allocatedStudent;
-                    if (stu) {
-                        const color = courseColor(stu.course);
-                        html += `<div class="seat" style="border-top:3px solid ${color}">
-                            <b>${esc(stu.rollNo) || '?'}</b>
-                            <span title="${esc(stu.name)}">${esc(stu.name) || '-'}</span>
-                            <em style="background:${color}">${esc(stu.course) || '-'}</em>
-                        </div>`;
+                    const cellSeats = map.get(r + ':' + c) || [];
+                    if (cellSeats.length <= 1) {
+                        const stu = cellSeats[0] && cellSeats[0].allocatedStudent;
+                        if (stu) {
+                            const color = courseColor(stu.course);
+                            html += `<div class="seat" style="border-top:3px solid ${color}">
+                                <b>${esc(stu.rollNo) || '?'}</b>
+                                <span title="${esc(stu.name)}">${esc(stu.name) || '-'}</span>
+                                <em style="background:${color}">${esc(stu.course) || '-'}</em>
+                            </div>`;
+                        } else {
+                            html += '<div class="seat vacant">Vacant</div>';
+                        }
                     } else {
-                        html += '<div class="seat vacant">Vacant</div>';
+                        html += `<div class="seat multi" style="height:${Math.max(62, cellSeats.length * 34 + 10)}px">`;
+                        cellSeats.forEach(seat => {
+                            const stu = seat.allocatedStudent;
+                            if (stu) {
+                                const color = courseColor(stu.course);
+                                html += `<div class="slot" style="border-left:3px solid ${color}" title="${esc(stu.name)}"><b>${esc(stu.rollNo) || '?'}</b><span>${esc(stu.name) || '-'}</span></div>`;
+                            } else {
+                                html += '<div class="slot empty">Vacant</div>';
+                            }
+                        });
+                        html += '</div>';
                     }
                 }
             }
@@ -919,6 +1031,7 @@
         stats.innerHTML = `
             <div class="count"><b>${allocated}</b> seated</div>
             <div class="count"><b>${eligible.length}</b> eligible students</div>
+            <div class="count"><b>${deskTotal}</b> desks</div>
             <div class="count"><b>${groups.size}</b> rooms used</div>
             <div class="count"><b>${seats.length - allocated}</b> vacant seats</div>`;
 
@@ -1018,11 +1131,6 @@
     wireEnterNav($('student-form'), addStudent);
     wireEnterNav($('room-form'), addRoom);
     wireEnterNav($('exam-form'), addExam);
-
-    // Capacity auto-fills from rows x columns when left empty.
-    ['r-rows', 'r-cols'].forEach(id => $(id).addEventListener('change', () => {
-        if (!$('r-cap').value) $('r-cap').value = roomCapacity() || '';
-    }));
 
     loadDashboard();
     </script>

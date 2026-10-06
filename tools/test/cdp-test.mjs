@@ -130,14 +130,46 @@ try {
   check('save updates student', results.students.saved);
   check('delete removes student', results.students.deleted);
 
-  // ---------- rooms ----------
+  // ---------- rooms: desk prediction, capacity auto-fill, add/delete ----------
   results.rooms = await evaluate(`(async () => {
+    const $ = id => document.getElementById(id);
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const out = {};
     document.querySelector('.tab[data-section="rooms"]').click();
-    await new Promise(r => setTimeout(r, 800));
-    return { rows: document.querySelectorAll('#room-list tr').length,
-             hasGrid: document.querySelector('#room-list').textContent.includes('121') };
+    await sleep(800);
+    out.rows = document.querySelectorAll('#room-list tr').length;
+    out.hasGrid = document.querySelector('#room-list').textContent.includes('121');
+
+    // Type a desk count -> rows/columns should be predicted (12 -> 3 x 4)
+    $('r-no').value = '200';
+    $('r-desks').value = '12';
+    $('r-desks').dispatchEvent(new Event('input', { bubbles: true }));
+    out.predRows = $('r-rows').value;
+    out.predCols = $('r-cols').value;
+
+    // Students per desk -> capacity auto-fills (12 x 2 = 24)
+    $('r-per').value = '2';
+    $('r-per').dispatchEvent(new Event('input', { bubbles: true }));
+    out.autoCap = $('r-cap').value;
+
+    [...document.querySelectorAll('#room-form button')].find(b => b.textContent.includes('Add Room')).click();
+    await sleep(1300);
+    out.added = document.querySelector('#room-list').textContent.includes('200');
+    out.formReset = $('r-desks').value === '' && $('r-per').value === '1';
+
+    // cleanup: delete the room created by this test
+    const del = [...document.querySelectorAll('#room-list tr')]
+      .find(tr => tr.textContent.includes('200'))?.querySelector('button[data-act="delete"]');
+    if (del) { del.click(); await sleep(1300); }
+    out.deleted = !document.querySelector('#room-list').textContent.includes('200');
+    return out;
   })()`);
-  check('rooms tab lists rooms', results.rooms.rows >= 2 && results.rooms.hasGrid, JSON.stringify(results.rooms));
+  check('rooms tab lists rooms', results.rooms.rows >= 2 && results.rooms.hasGrid, JSON.stringify({ rows: results.rooms.rows }));
+  check('desk count predicts rows x columns', results.rooms.predRows === '3' && results.rooms.predCols === '4',
+        `${results.rooms.predRows}x${results.rooms.predCols}`);
+  check('capacity auto = desks x students/desk', results.rooms.autoCap === '24', 'cap=' + results.rooms.autoCap);
+  check('room created & form reset', results.rooms.added && results.rooms.formReset);
+  check('test room cleaned up', results.rooms.deleted);
 
   // ---------- exams: create with auto application id ----------
   results.exams = await evaluate(`(async () => {
@@ -194,6 +226,49 @@ try {
   check('course legend rendered', results.chart.legend.includes('CSE'), results.chart.legend);
   check('stats row visible', results.chart.statsVisible);
   check('chart PDF reachable from browser', results.chart.pdfReachable === 200, 'status=' + results.chart.pdfReachable);
+
+  // ---------- shared desks: students per desk = 2 ----------
+  results.shared = await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    document.querySelector('.tab[data-section="rooms"]').click();
+    await sleep(700);
+    const edit = [...document.querySelectorAll('#room-list tr')]
+      .find(tr => tr.textContent.includes('121'))?.querySelector('button[data-act="edit"]');
+    edit.click();
+    await sleep(300);
+    const row = document.querySelector('#room-list tr[data-edit]');
+    out.editRendered = !!row;
+    row.querySelector('[data-f="studentsPerDesk"]').value = '2';
+    row.querySelector('[data-act="save"]').click();
+    await sleep(1400);
+    out.saved = !document.querySelector('#room-list tr[data-edit]');
+
+    document.querySelector('.tab[data-section="allocation"]').click();
+    await sleep(800);
+    document.getElementById('btn-generate').click();
+    await sleep(1600);
+    out.message = document.getElementById('allocation-message').textContent;
+    out.multiCells = document.querySelectorAll('#chart-container .seat.multi').length;
+    const first = document.querySelector('#chart-container .seat.multi');
+    if (first) {
+      out.firstCell = first.textContent;
+      out.slots = first.querySelectorAll('.slot').length;
+      out.fullSlots = first.querySelectorAll('.slot:not(.empty)').length;
+    }
+    out.statsText = document.getElementById('alloc-stats').textContent.replace(/\\s+/g, ' ').trim();
+    out.pdf = await fetch('/api/chart/pdf?examId=1').then(r => r.status).catch(() => 0);
+    return out;
+  })()`);
+  check('room saved with students per desk = 2', results.shared.editRendered && results.shared.saved);
+  check('chart renders shared desks (multi-slot cells)', results.shared.multiCells >= 1,
+        'multi=' + results.shared.multiCells);
+  check('first desk holds exactly 2 students',
+        results.shared.slots === 2 && results.shared.fullSlots === 2 &&
+        results.shared.firstCell.includes('101') && results.shared.firstCell.includes('102'),
+        results.shared.firstCell);
+  check('stats count desks', (results.shared.statsText || '').includes('desks'), results.shared.statsText);
+  check('chart PDF works for shared desks', results.shared.pdf === 200, 'status=' + results.shared.pdf);
 
   // ---------- import ----------
   results.import = await evaluate(`(async () => {

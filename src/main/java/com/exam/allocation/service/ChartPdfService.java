@@ -170,7 +170,16 @@ public class ChartPdfService {
         int cols = roomSeats.stream().mapToInt(Seat::getColumnNumber).max().orElse(1);
         String roomNumber = first.getRoom() == null ? "?" : first.getRoom().getRoomNumber();
 
-        ensureSpace(cursor, CELL_H + COL_LABEL_H + 40);
+        // Group seats by desk cell (row:col), ordered by desk position.
+        Map<String, List<Seat>> cells = new LinkedHashMap<>();
+        for (Seat seat : roomSeats) {
+            cells.computeIfAbsent(seat.getRowNumber() + ":" + seat.getColumnNumber(),
+                    k -> new ArrayList<>()).add(seat);
+        }
+        int perDesk = cells.values().stream().mapToInt(List::size).max().orElse(1);
+        float cellH = perDesk <= 1 ? CELL_H : Math.max(50f, 16 + perDesk * 18);
+
+        ensureSpace(cursor, cellH + COL_LABEL_H + 40);
         cursor.y -= 6;
 
         PDPageContentStream cs = cursor.cs;
@@ -190,12 +199,12 @@ public class ChartPdfService {
         cursor.y -= COL_LABEL_H;
 
         for (int r = 1; r <= rows; r++) {
-            if (ensureSpace(cursor, CELL_H)) {
+            if (ensureSpace(cursor, cellH)) {
                 // Continued on a new page: repeat the column labels first.
                 drawColumnLabels(cursor, x0, cellW, cols);
                 cursor.y -= COL_LABEL_H;
             }
-            drawRoomRow(cursor, r, cols, x0, cellW, roomSeats, courses);
+            drawRoomRow(cursor, r, cols, x0, cellW, cells, cellH, courses);
         }
         cursor.y -= 28;
     }
@@ -209,23 +218,21 @@ public class ChartPdfService {
     }
 
     private void drawRoomRow(Cursor cursor, int row, int cols, float x0, float cellW,
-                             List<Seat> roomSeats, Map<String, Integer[]> courses) throws IOException {
+                             Map<String, List<Seat>> cells, float cellH,
+                             Map<String, Integer[]> courses) throws IOException {
         PDPageContentStream cs = cursor.cs;
         float rowTop = cursor.y;
-        float rowBottom = rowTop - CELL_H;
+        float rowBottom = rowTop - cellH;
 
         cs.beginText();
         cs.setFont(PDType1Font.HELVETICA_BOLD, 8);
-        cs.newLineAtOffset(MARGIN, rowTop - CELL_H / 2 - 3);
+        cs.newLineAtOffset(MARGIN, rowTop - cellH / 2 - 3);
         cs.showText("R" + row);
         cs.endText();
 
         for (int c = 1; c <= cols; c++) {
-            final int rr = row, cc = c;
-            Seat seat = roomSeats.stream()
-                    .filter(s -> s.getRowNumber() == rr && s.getColumnNumber() == cc)
-                    .findFirst().orElse(null);
-            drawSeat(cursor, x0 + (c - 1) * cellW, rowBottom, cellW, CELL_H, seat, courses);
+            List<Seat> cellSeats = cells.getOrDefault(row + ":" + c, java.util.Collections.emptyList());
+            drawSeat(cursor, x0 + (c - 1) * cellW, rowBottom, cellW, cellH, cellSeats, courses);
         }
 
         cs.setStrokingColor(209, 213, 219);
@@ -238,35 +245,93 @@ public class ChartPdfService {
         cursor.y = rowBottom;
     }
 
+    /** Draws one desk cell: a single student (course-coloured) or N slots for a shared desk. */
     private void drawSeat(Cursor cursor, float x, float y, float w, float h,
-                          Seat seat, Map<String, Integer[]> courses) throws IOException {
+                          List<Seat> cellSeats, Map<String, Integer[]> courses) throws IOException {
         PDPageContentStream cs = cursor.cs;
-        boolean vacant = seat == null || seat.getAllocatedStudent() == null;
-        int[] rgb = vacant ? new int[]{243, 244, 246} : colorFor(seat.getAllocatedStudent().getCourse(), courses);
+        boolean single = cellSeats.size() <= 1;
+        Seat firstSeat = cellSeats.isEmpty() ? null : cellSeats.get(0);
+        boolean vacantSingle = single && (firstSeat == null || firstSeat.getAllocatedStudent() == null);
 
-        cs.setNonStrokingColor(rgb[0], rgb[1], rgb[2]);
+        if (single) {
+            int[] rgb = vacantSingle ? new int[]{243, 244, 246}
+                    : colorFor(firstSeat.getAllocatedStudent().getCourse(), courses);
+            cs.setNonStrokingColor(rgb[0], rgb[1], rgb[2]);
+        } else {
+            cs.setNonStrokingColor(255, 255, 255);
+        }
         cs.addRect(x, y, w, h);
         cs.fill();
         cs.setStrokingColor(156, 163, 175);
         cs.setLineWidth(0.6f);
         cs.addRect(x, y, w, h);
         cs.stroke();
+        cs.setStrokingColor(0, 0, 0);
 
-        if (vacant) {
-            centeredAt(cs, x + w / 2, y + h / 2 - 3, "VACANT", PDType1Font.HELVETICA, 7);
+        if (single) {
+            if (vacantSingle) {
+                centeredAt(cs, x + w / 2, y + h / 2 - 3, "VACANT", PDType1Font.HELVETICA, 7);
+                return;
+            }
+            Student student = firstSeat.getAllocatedStudent();
+            int[] rgb = colorFor(student.getCourse(), courses);
+            boolean dark = rgb[0] + rgb[1] + rgb[2] < 400;
+            cs.setNonStrokingColor(dark ? 255 : 17, dark ? 255 : 24, dark ? 255 : 39);
+            centeredAt(cs, x + w / 2, y + h - 15,
+                    fit(student.getRollNo(), (int) Math.max(4, w / 5.5)), PDType1Font.HELVETICA_BOLD, 9);
+            centeredAt(cs, x + w / 2, y + h - 27,
+                    fit(student.getName(), (int) Math.max(4, w / 4.6)), PDType1Font.HELVETICA, 7.5f);
+            centeredAt(cs, x + w / 2, y + 6,
+                    fit(student.getCourse(), (int) Math.max(4, w / 4.0)), PDType1Font.HELVETICA, 6.5f);
             return;
         }
 
-        Student student = seat.getAllocatedStudent();
-        boolean dark = rgb[0] + rgb[1] + rgb[2] < 400;
-        cs.setNonStrokingColor(dark ? 255 : 17, dark ? 255 : 24, dark ? 255 : 39);
+        // Shared desk: one slot per position, top slot first.
+        int n = cellSeats.size();
+        float pad = 3;
+        float slotH = (h - pad * 2) / n;
+        for (int i = 0; i < n; i++) {
+            Seat seat = cellSeats.get(i);
+            float innerY = y + h - pad - (i + 1) * slotH + 1.5f;
+            float innerH = slotH - 3;
+            Student student = seat == null ? null : seat.getAllocatedStudent();
 
-        centeredAt(cs, x + w / 2, y + h - 15,
-                fit(student.getRollNo(), (int) Math.max(4, w / 5.5)), PDType1Font.HELVETICA_BOLD, 9);
-        centeredAt(cs, x + w / 2, y + h - 27,
-                fit(student.getName(), (int) Math.max(4, w / 4.6)), PDType1Font.HELVETICA, 7.5f);
-        centeredAt(cs, x + w / 2, y + 6,
-                fit(student.getCourse(), (int) Math.max(4, w / 4.0)), PDType1Font.HELVETICA, 6.5f);
+            if (student == null) {
+                cs.setNonStrokingColor(249, 250, 251);
+                cs.addRect(x + 2, innerY, w - 4, innerH);
+                cs.fill();
+                centeredAt(cs, x + w / 2, innerY + innerH / 2 - 2.5f, "Vacant", PDType1Font.HELVETICA, 6.5f);
+                continue;
+            }
+
+            int[] rgb = colorFor(student.getCourse(), courses);
+            cs.setNonStrokingColor(rgb[0], rgb[1], rgb[2]);
+            cs.addRect(x + 2, innerY, 3, innerH);   // course-coloured position bar
+            cs.fill();
+
+            cs.setNonStrokingColor(17, 24, 39);
+            String roll = sanitize(fit(student.getRollNo(), 8));
+            float rollW;
+            try {
+                rollW = PDType1Font.HELVETICA_BOLD.getStringWidth(roll) / 1000f * 7.5f;
+            } catch (IOException e) {
+                rollW = roll.length() * 4f;
+            }
+            float textY = innerY + innerH / 2 - 2.5f;
+            cs.beginText();
+            cs.setFont(PDType1Font.HELVETICA_BOLD, 7.5f);
+            cs.newLineAtOffset(x + 8, textY);
+            cs.showText(roll);
+            cs.endText();
+
+            float nameX = x + 8 + rollW + 4;
+            int nameChars = Math.max(3, (int) ((x + w - 5 - nameX) / 3.2f));
+            cs.beginText();
+            cs.setFont(PDType1Font.HELVETICA, 6.5f);
+            cs.newLineAtOffset(nameX, textY);
+            cs.showText(sanitize(fit(student.getName(), nameChars)));
+            cs.endText();
+        }
     }
 
     private void drawFooters(PDDocument document) throws IOException {

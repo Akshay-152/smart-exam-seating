@@ -105,7 +105,7 @@ public class AllocationService {
             int cols = room.getColumnsCount();
             if (rows <= 0 || cols <= 0) continue;
 
-            List<Seat> seats = prepareSeats(room, exam, rows, cols);
+            List<Seat> seats = prepareSeats(room, exam, rows, cols, room.getStudentsPerDesk());
             if (seats.isEmpty()) continue;
             roomsUsed++;
 
@@ -135,18 +135,24 @@ public class AllocationService {
     }
 
     /**
-     * Returns the seats of this room for this exam, ordered row/column.
+     * Returns the seats of this room for this exam, ordered row/column/position.
+     * Each desk (grid cell) holds {@code studentsPerDesk} seats, so a desk that
+     * seats two students gets two seat rows at the same row/column.
      * Creates the grid if it does not exist yet (or if the room layout changed),
      * and clears any previous student assignment so re-running is idempotent.
      */
-    private List<Seat> prepareSeats(Room room, Exam exam, int rows, int cols) {
+    private List<Seat> prepareSeats(Room room, Exam exam, int rows, int cols, int perDesk) {
+        if (perDesk < 1) perDesk = 1;
+        int total = rows * cols * perDesk;
+
         List<Seat> existing = seatRepository.findByRoomId(room.getId()).stream()
                 .filter(s -> s.getExam() != null && exam.getId() != null && exam.getId().equals(s.getExam().getId()))
                 .sorted(java.util.Comparator.comparingInt(Seat::getRowNumber)
-                        .thenComparingInt(Seat::getColumnNumber))
+                        .thenComparingInt(Seat::getColumnNumber)
+                        .thenComparingInt(Seat::getDeskPosition))
                 .collect(Collectors.toList());
 
-        if (existing.size() != rows * cols) {
+        if (existing.size() != total) {
             if (!existing.isEmpty()) {
                 seatRepository.deleteAll(existing);
                 seatRepository.flush();
@@ -154,18 +160,21 @@ public class AllocationService {
             List<Seat> created = new ArrayList<>();
             for (int r = 1; r <= rows; r++) {
                 for (int c = 1; c <= cols; c++) {
-                    Seat seat = new Seat();
-                    seat.setRowNumber(r);
-                    seat.setColumnNumber(c);
-                    seat.setRoom(room);
-                    seat.setExam(exam);
-                    created.add(seat);
+                    for (int p = 1; p <= perDesk; p++) {
+                        Seat seat = new Seat();
+                        seat.setRowNumber(r);
+                        seat.setColumnNumber(c);
+                        seat.setDeskPosition(p);
+                        seat.setRoom(room);
+                        seat.setExam(exam);
+                        created.add(seat);
+                    }
                 }
             }
             return seatRepository.saveAll(created);
         }
 
-        // Re-run: wipe previous chart of this exam, keep the physical seats.
+        // Re-run: wipe previous chart of this exam, keep the physical desks.
         existing.forEach(s -> s.setAllocatedStudent(null));
         return existing;
     }

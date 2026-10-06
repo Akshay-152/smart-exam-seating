@@ -25,6 +25,9 @@ public class Room {
     @Column(nullable = false)
     private int columnsCount;
 
+    /** How many students share one desk/bench (exam desks often seat 2). */
+    private int studentsPerDesk = 1;
+
     // @JsonIgnore breaks the Seat -> Room -> Seat serialization cycle that
     // previously made /api/rooms return an infinitely nested JSON payload.
     @JsonIgnore
@@ -49,6 +52,12 @@ public class Room {
 
     public int getColumnsCount() { return columnsCount; }
     public void setColumnsCount(int columnsCount) { this.columnsCount = columnsCount; }
+
+    /** Normalised accessor: a room always has at least one student per desk. */
+    public int getStudentsPerDesk() { return studentsPerDesk < 1 ? 1 : studentsPerDesk; }
+    public void setStudentsPerDesk(int studentsPerDesk) {
+        this.studentsPerDesk = studentsPerDesk < 1 ? 1 : studentsPerDesk;
+    }
 
     public List<Seat> getSeats() { return seats; }
     public void setSeats(List<Seat> seats) { this.seats = seats; }
