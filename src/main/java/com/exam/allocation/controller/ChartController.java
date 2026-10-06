@@ -45,8 +45,8 @@ public class ChartController {
         }
         seats.sort(Comparator
                 .comparing((Seat s) -> s.getRoom() == null ? 0L : s.getRoom().getId())
-                .thenComparingInt(Seat::getRowNumber)
-                .thenComparingInt(Seat::getColumnNumber));
+                .thenComparingInt(s -> s.getRowNumber())
+                .thenComparingInt(s -> s.getColumnNumber()));
 
         byte[] pdf = chartPdfService.buildChartPdf(exam, seats);
 

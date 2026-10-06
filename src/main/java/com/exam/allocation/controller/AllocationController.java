@@ -131,13 +131,13 @@ public class AllocationController {
                 return failure("No exams found. Create an exam first, then generate the chart.");
             }
             examId = exams.stream()
-                    .max(Comparator.comparing(Exam::getId))
-                    .map(Exam::getId)
+                    .max(Comparator.comparing(e -> e.getId()))
+                    .map(e -> e.getId())
                     .orElse(null);
         }
 
         List<Long> roomIds = roomRepository.findAll().stream()
-                .map(Room::getId)
+                .map(r -> r.getId())
                 .collect(Collectors.toList());
         if (roomIds.isEmpty()) {
             return failure("No rooms available for allocation. Add a room first.");
@@ -156,8 +156,8 @@ public class AllocationController {
                 : seatRepository.findAll();
         seats.sort(Comparator
                 .comparing((Seat s) -> s.getRoom() == null ? 0L : s.getRoom().getId())
-                .thenComparingInt(Seat::getRowNumber)
-                .thenComparingInt(Seat::getColumnNumber));
+                .thenComparingInt(s -> s.getRowNumber())
+                .thenComparingInt(s -> s.getColumnNumber()));
         return seats;
     }
 

@@ -71,7 +71,8 @@ public class ImportService {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("No file uploaded. Choose a .pdf, .xlsx, .xls or .csv file.");
         }
-        String original = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+        String rawName = file.getOriginalFilename();
+        String original = rawName == null ? "" : rawName;
         String lower = original.toLowerCase();
 
         List<String[]> rows;
@@ -117,7 +118,7 @@ public class ImportService {
                     + mapping.size() + " recognised column(s).");
         }
 
-        int expected = mapping.values().stream().mapToInt(Integer::intValue).max().orElse(3) + 1;
+        int expected = mapping.values().stream().mapToInt(v -> v).max().orElse(3) + 1;
         int nameIdx = mapping.getOrDefault(F_NAME, 1);
 
         // ---- Read each row into fields ---------------------------------------

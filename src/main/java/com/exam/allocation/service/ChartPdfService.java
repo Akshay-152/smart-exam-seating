@@ -48,12 +48,11 @@ public class ChartPdfService {
         {20, 184, 166},  // teal
     };
 
-    /** Drawing state: current page stream, y position and page counter. */
+    /** Drawing state: current page stream and y position. */
     private static class Cursor {
         final PDDocument doc;
         PDPageContentStream cs;
         float y;
-        int pageCount;
 
         Cursor(PDDocument doc) { this.doc = doc; }
     }
@@ -73,8 +72,8 @@ public class ChartPdfService {
                 byRoom.computeIfAbsent(roomId, k -> new ArrayList<>()).add(seat);
             }
             for (List<Seat> roomSeats : byRoom.values()) {
-                roomSeats.sort(Comparator.comparingInt(Seat::getRowNumber)
-                        .thenComparingInt(Seat::getColumnNumber));
+                roomSeats.sort(Comparator.comparingInt((Seat s) -> s.getRowNumber())
+                        .thenComparingInt(s -> s.getColumnNumber()));
                 drawRoom(cursor, roomSeats, courses);
             }
 
@@ -94,7 +93,6 @@ public class ChartPdfService {
         cursor.doc.addPage(page);
         cursor.cs = new PDPageContentStream(cursor.doc, page);
         cursor.y = PAGE_H - MARGIN;
-        cursor.pageCount++;
     }
 
     /** Starts a fresh page when height no longer fits; returns true when that happened. */
@@ -125,12 +123,12 @@ public class ChartPdfService {
                 PDType1Font.HELVETICA, 8);
         cursor.y -= 10;
 
-        cs.setStrokingColor(79, 70, 229);
+        strokeRgb(cs, 79, 70, 229);
         cs.setLineWidth(1.4f);
         cs.moveTo(MARGIN, cursor.y);
         cs.lineTo(PAGE_W - MARGIN, cursor.y);
         cs.stroke();
-        cs.setStrokingColor(0, 0, 0);
+        strokeRgb(cs, 0, 0, 0);
         cursor.y -= 22;
     }
 
@@ -147,10 +145,10 @@ public class ChartPdfService {
         float x = MARGIN + 54;
         for (Map.Entry<String, Integer[]> entry : courses.entrySet()) {
             Integer[] rgb = entry.getValue();
-            cs.setNonStrokingColor(rgb[0], rgb[1], rgb[2]);
+            fillRgb(cs, rgb[0], rgb[1], rgb[2]);
             cs.addRect(x, cursor.y - 1, 8, 8);
             cs.fill();
-            cs.setNonStrokingColor(30, 30, 30);
+            fillRgb(cs, 30, 30, 30);
             String label = entry.getKey() + " (" + rgb[3] + ")";
             cs.beginText();
             cs.setFont(PDType1Font.HELVETICA, 8);
@@ -167,7 +165,7 @@ public class ChartPdfService {
         if (roomSeats.isEmpty()) return;
         Seat first = roomSeats.get(0);
         int rows = roomSeats.get(roomSeats.size() - 1).getRowNumber();
-        int cols = roomSeats.stream().mapToInt(Seat::getColumnNumber).max().orElse(1);
+        int cols = roomSeats.stream().mapToInt(s -> s.getColumnNumber()).max().orElse(1);
         String roomNumber = first.getRoom() == null ? "?" : first.getRoom().getRoomNumber();
 
         // Group seats by desk cell (row:col), ordered by desk position.
@@ -176,7 +174,7 @@ public class ChartPdfService {
             cells.computeIfAbsent(seat.getRowNumber() + ":" + seat.getColumnNumber(),
                     k -> new ArrayList<>()).add(seat);
         }
-        int perDesk = cells.values().stream().mapToInt(List::size).max().orElse(1);
+        int perDesk = cells.values().stream().mapToInt(l -> l.size()).max().orElse(1);
         float cellH = perDesk <= 1 ? CELL_H : Math.max(50f, 16 + perDesk * 18);
 
         ensureSpace(cursor, cellH + COL_LABEL_H + 40);
@@ -235,12 +233,12 @@ public class ChartPdfService {
             drawSeat(cursor, x0 + (c - 1) * cellW, rowBottom, cellW, cellH, cellSeats, courses);
         }
 
-        cs.setStrokingColor(209, 213, 219);
+        strokeRgb(cs, 209, 213, 219);
         cs.setLineWidth(0.6f);
         cs.moveTo(x0, rowBottom);
         cs.lineTo(x0 + cols * cellW, rowBottom);
         cs.stroke();
-        cs.setStrokingColor(0, 0, 0);
+        strokeRgb(cs, 0, 0, 0);
 
         cursor.y = rowBottom;
     }
@@ -251,38 +249,38 @@ public class ChartPdfService {
         PDPageContentStream cs = cursor.cs;
         boolean single = cellSeats.size() <= 1;
         Seat firstSeat = cellSeats.isEmpty() ? null : cellSeats.get(0);
-        boolean vacantSingle = single && (firstSeat == null || firstSeat.getAllocatedStudent() == null);
+        Student singleStudent = firstSeat == null ? null : firstSeat.getAllocatedStudent();
 
         if (single) {
-            int[] rgb = vacantSingle ? new int[]{243, 244, 246}
-                    : colorFor(firstSeat.getAllocatedStudent().getCourse(), courses);
-            cs.setNonStrokingColor(rgb[0], rgb[1], rgb[2]);
+            int[] rgb = singleStudent == null ? new int[]{243, 244, 246}
+                    : colorFor(singleStudent.getCourse(), courses);
+            fillRgb(cs, rgb[0], rgb[1], rgb[2]);
         } else {
-            cs.setNonStrokingColor(255, 255, 255);
+            fillRgb(cs, 255, 255, 255);
         }
         cs.addRect(x, y, w, h);
         cs.fill();
-        cs.setStrokingColor(156, 163, 175);
+        strokeRgb(cs, 156, 163, 175);
         cs.setLineWidth(0.6f);
         cs.addRect(x, y, w, h);
         cs.stroke();
-        cs.setStrokingColor(0, 0, 0);
+        strokeRgb(cs, 0, 0, 0);
 
         if (single) {
-            if (vacantSingle) {
+            if (singleStudent == null) {
+                fillRgb(cs, 156, 163, 175);   // visible grey on the light cell background
                 centeredAt(cs, x + w / 2, y + h / 2 - 3, "VACANT", PDType1Font.HELVETICA, 7);
                 return;
             }
-            Student student = firstSeat.getAllocatedStudent();
-            int[] rgb = colorFor(student.getCourse(), courses);
+            int[] rgb = colorFor(singleStudent.getCourse(), courses);
             boolean dark = rgb[0] + rgb[1] + rgb[2] < 400;
-            cs.setNonStrokingColor(dark ? 255 : 17, dark ? 255 : 24, dark ? 255 : 39);
+            fillRgb(cs, dark ? 255 : 17, dark ? 255 : 24, dark ? 255 : 39);
             centeredAt(cs, x + w / 2, y + h - 15,
-                    fit(student.getRollNo(), (int) Math.max(4, w / 5.5)), PDType1Font.HELVETICA_BOLD, 9);
+                    fit(singleStudent.getRollNo(), (int) Math.max(4, w / 5.5)), PDType1Font.HELVETICA_BOLD, 9);
             centeredAt(cs, x + w / 2, y + h - 27,
-                    fit(student.getName(), (int) Math.max(4, w / 4.6)), PDType1Font.HELVETICA, 7.5f);
+                    fit(singleStudent.getName(), (int) Math.max(4, w / 4.6)), PDType1Font.HELVETICA, 7.5f);
             centeredAt(cs, x + w / 2, y + 6,
-                    fit(student.getCourse(), (int) Math.max(4, w / 4.0)), PDType1Font.HELVETICA, 6.5f);
+                    fit(singleStudent.getCourse(), (int) Math.max(4, w / 4.0)), PDType1Font.HELVETICA, 6.5f);
             return;
         }
 
@@ -297,19 +295,20 @@ public class ChartPdfService {
             Student student = seat == null ? null : seat.getAllocatedStudent();
 
             if (student == null) {
-                cs.setNonStrokingColor(249, 250, 251);
+                fillRgb(cs, 249, 250, 251);
                 cs.addRect(x + 2, innerY, w - 4, innerH);
                 cs.fill();
+                fillRgb(cs, 156, 163, 175);   // visible grey on the light slot background
                 centeredAt(cs, x + w / 2, innerY + innerH / 2 - 2.5f, "Vacant", PDType1Font.HELVETICA, 6.5f);
                 continue;
             }
 
             int[] rgb = colorFor(student.getCourse(), courses);
-            cs.setNonStrokingColor(rgb[0], rgb[1], rgb[2]);
+            fillRgb(cs, rgb[0], rgb[1], rgb[2]);
             cs.addRect(x + 2, innerY, 3, innerH);   // course-coloured position bar
             cs.fill();
 
-            cs.setNonStrokingColor(17, 24, 39);
+            fillRgb(cs, 17, 24, 39);
             String roll = sanitize(fit(student.getRollNo(), 8));
             float rollW;
             try {
@@ -324,12 +323,30 @@ public class ChartPdfService {
             cs.showText(roll);
             cs.endText();
 
+            // Subject of this student, right-aligned in the slot so every desk
+            // clearly shows which course each of its students belongs to.
+            String course = sanitize(fit(student.getCourse(), 7));
+            float courseW;
+            try {
+                courseW = PDType1Font.HELVETICA.getStringWidth(course) / 1000f * 6f;
+            } catch (IOException e) {
+                courseW = course.length() * 3f;
+            }
+            float courseX = x + w - 5 - courseW;
+
             float nameX = x + 8 + rollW + 4;
-            int nameChars = Math.max(3, (int) ((x + w - 5 - nameX) / 3.2f));
+            int nameChars = Math.max(2, (int) ((courseX - 4 - nameX) / 3.2f));
             cs.beginText();
             cs.setFont(PDType1Font.HELVETICA, 6.5f);
             cs.newLineAtOffset(nameX, textY);
             cs.showText(sanitize(fit(student.getName(), nameChars)));
+            cs.endText();
+
+            fillRgb(cs, 107, 114, 128);
+            cs.beginText();
+            cs.setFont(PDType1Font.HELVETICA, 6f);
+            cs.newLineAtOffset(courseX, textY);
+            cs.showText(course);
             cs.endText();
         }
     }
@@ -340,7 +357,7 @@ public class ChartPdfService {
         for (int i = 0; i < total; i++) {
             PDPage page = document.getPage(i);
             try (PDPageContentStream cs = new PDPageContentStream(document, page, AppendMode.APPEND, true, true)) {
-                cs.setNonStrokingColor(107, 114, 128);
+                fillRgb(cs, 107, 114, 128);
                 cs.beginText();
                 cs.setFont(PDType1Font.HELVETICA, 7.5f);
                 cs.newLineAtOffset(MARGIN, BOTTOM - 16);
@@ -366,7 +383,7 @@ public class ChartPdfService {
             if (seat.getAllocatedStudent() == null) continue;
             String course = seat.getAllocatedStudent().getCourse();
             course = (course == null || course.isBlank()) ? "Unspecified" : course.trim();
-            counts.merge(course, 1, Integer::sum);
+            counts.merge(course, 1, (a, b) -> a + b);
         }
         int i = 0;
         for (Map.Entry<String, Integer> entry : counts.entrySet()) {
@@ -423,5 +440,17 @@ public class ChartPdfService {
 
     private String value(String v, String fallback) {
         return (v == null || v.isBlank()) ? fallback : v;
+    }
+
+    /*
+     * Colour helpers: the int (0..255) set*Color(...) overloads are deprecated in
+     * PDFBox, so convert to the float (0..1) forms here instead of at every call site.
+     */
+    private static void strokeRgb(PDPageContentStream stream, int r, int g, int b) throws IOException {
+        stream.setStrokingColor(r / 255f, g / 255f, b / 255f);
+    }
+
+    private static void fillRgb(PDPageContentStream stream, int r, int g, int b) throws IOException {
+        stream.setNonStrokingColor(r / 255f, g / 255f, b / 255f);
     }
 }

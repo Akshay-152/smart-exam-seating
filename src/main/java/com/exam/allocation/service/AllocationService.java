@@ -15,9 +15,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -95,12 +98,14 @@ public class AllocationService {
                 .collect(Collectors.groupingBy(AllocationService::courseKey, LinkedHashMap::new, Collectors.toList()));
         List<Student> sequence = interleave(studentsByCourse);
 
+        // Work queue holding the exact existing round-robin order; every desk draws
+        // its students from the front of this queue (see fillDesk for the subject-mixing rule).
+        LinkedList<Student> queue = new LinkedList<>(sequence);
         int allocated = 0;
         int roomsUsed = 0;
-        int next = 0;
 
         for (Room room : rooms) {
-            if (next >= sequence.size()) break;
+            if (queue.isEmpty()) break;
             int rows = room.getRowsCount();
             int cols = room.getColumnsCount();
             if (rows <= 0 || cols <= 0) continue;
@@ -109,13 +114,19 @@ public class AllocationService {
             if (seats.isEmpty()) continue;
             roomsUsed++;
 
+            // Seats arrive ordered row/column/position, so consecutive seats that share
+            // the same row and column form one desk - fill the room desk by desk.
+            List<Seat> desk = new ArrayList<>();
             for (Seat seat : seats) {
-                if (next >= sequence.size()) break;
-                Student student = sequence.get(next++);
-                seat.setAllocatedStudent(student);
-                seat.setExam(exam);
-                allocated++;
+                if (!desk.isEmpty() && (seat.getRowNumber() != desk.get(0).getRowNumber()
+                        || seat.getColumnNumber() != desk.get(0).getColumnNumber())) {
+                    allocated += fillDesk(desk, queue, exam);
+                    desk.clear();
+                }
+                desk.add(seat);
             }
+            if (!desk.isEmpty()) allocated += fillDesk(desk, queue, exam);
+
             seatRepository.saveAll(seats);
         }
 
@@ -135,6 +146,70 @@ public class AllocationService {
     }
 
     /**
+     * Fills one desk (every student position of a single row/column cell) from the
+     * front of the queue and returns how many students were seated.
+     *
+     * <p><b>Subject/Course Mixing Rule (enhancement):</b> while filling the desk, a
+     * student whose course differs from the courses already seated at this desk is
+     * preferred, so that e.g. {@code CS | OOP | CS} is chosen over {@code CS | CS | CS}
+     * whenever OOP students are still available. All existing rules are preserved:
+     * students are still drawn from the original round-robin sequence (only their
+     * order within/near this desk may be swapped), no student is ever duplicated or
+     * lost (unused candidates go back to the front of the queue in their original
+     * order), never more than {@code deskSeats.size()} students are placed, and when
+     * no different course is left the next student in the sequence is used as before.
+     * The choice is deterministic: always the earliest fitting student in sequence order.
+     */
+    private int fillDesk(List<Seat> deskSeats, LinkedList<Student> queue, Exam exam) {
+        int needed = deskSeats.size();
+        if (queue.isEmpty() || needed == 0) return 0;
+
+        // Look ahead far enough to see every course that is still available, so a
+        // different subject just past the desk's own slice can still be pulled in.
+        int distinctRemaining = (int) queue.stream()
+                .map(AllocationService::courseKey)
+                .map(c -> c.toLowerCase())
+                .distinct()
+                .count();
+        int windowSize = Math.min(queue.size(), needed + distinctRemaining);
+
+        List<Student> window = new ArrayList<>(windowSize);
+        for (int i = 0; i < windowSize; i++) window.add(queue.pollFirst());
+
+        Set<String> coursesAtDesk = new HashSet<>();
+        List<Student> picked = new ArrayList<>(needed);
+        for (int k = 0; k < needed && !window.isEmpty(); k++) {
+            int chosen = -1;
+            for (int j = 0; j < window.size(); j++) {
+                if (!coursesAtDesk.contains(courseKey(window.get(j)).toLowerCase())) {
+                    chosen = j;   // a subject not yet sitting at this desk
+                    break;
+                }
+            }
+            if (chosen == -1) chosen = 0;   // all remaining courses already present: keep sequence order
+            Student student = window.remove(chosen);
+            coursesAtDesk.add(courseKey(student).toLowerCase());
+            picked.add(student);
+        }
+
+        // Return the students we did not use to the FRONT of the queue in their
+        // original order - nothing is skipped, duplicated or reordered for later desks.
+        List<Student> rest = new ArrayList<>(window);
+        rest.addAll(queue);
+        queue.clear();
+        queue.addAll(rest);
+
+        int assigned = 0;
+        for (int i = 0; i < deskSeats.size() && i < picked.size(); i++) {
+            Seat seat = deskSeats.get(i);
+            seat.setAllocatedStudent(picked.get(i));
+            seat.setExam(exam);
+            assigned++;
+        }
+        return assigned;
+    }
+
+    /**
      * Returns the seats of this room for this exam, ordered row/column/position.
      * Each desk (grid cell) holds {@code studentsPerDesk} seats, so a desk that
      * seats two students gets two seat rows at the same row/column.
@@ -147,9 +222,9 @@ public class AllocationService {
 
         List<Seat> existing = seatRepository.findByRoomId(room.getId()).stream()
                 .filter(s -> s.getExam() != null && exam.getId() != null && exam.getId().equals(s.getExam().getId()))
-                .sorted(java.util.Comparator.comparingInt(Seat::getRowNumber)
-                        .thenComparingInt(Seat::getColumnNumber)
-                        .thenComparingInt(Seat::getDeskPosition))
+                .sorted(java.util.Comparator.comparingInt((Seat s) -> s.getRowNumber())
+                        .thenComparingInt(s -> s.getColumnNumber())
+                        .thenComparingInt(s -> s.getDeskPosition()))
                 .collect(Collectors.toList());
 
         if (existing.size() != total) {
