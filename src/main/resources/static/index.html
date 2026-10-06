@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Room Allocation System</title>
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --secondary: #10B981;
+            --dark: #1F2937;
+            --light: #F3F4F6;
+            --text-dark: #111827;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--light);
+            margin: 0;
+            padding: 0;
+            color: var(--text-dark);
+        }
+        .navbar {
+            background-color: var(--primary);
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s;
+            margin-right: 0.5rem;
+        }
+        .btn:hover { background-color: #4338CA; }
+        .btn-success { background-color: var(--secondary); }
+        .btn-success:hover { background-color: #059669; }
+        
+        .section-view { display: none; }
+        .active-view { display: block; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        th { background-color: #F9FAFB; }
+        
+        .form-group {
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 1rem;
+        }
+        input {
+            padding: 0.5rem;
+            border: 1px solid #D1D5DB;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>Room Allocation System</h1>
+        <div>Admin Dashboard</div>
+    </div>
+    
+    <div class="container">
+        <div class="card">
+            <h2>Dashboard Controls</h2>
+            <div style="margin-top: 1rem; display: flex; gap: 1rem;">
+                <button class="btn" onclick="showSection('students-section'); loadStudents()">Manage Students</button>
+                <button class="btn btn-success" onclick="showSection('rooms-section'); loadRooms()">Manage Rooms</button>
+                <button class="btn" style="background-color: #F59E0B;" onclick="showSection('allocation-section')">Generate Allocation</button>
+            </div>
+        </div>
+
+        <!-- Students Section -->
+        <div id="students-section" class="card section-view">
+            <h3>Manage Students</h3>
+            <div class="form-group">
+                <input type="text" id="s-roll" placeholder="Roll No">
+                <input type="text" id="s-name" placeholder="Name">
+                <input type="text" id="s-course" placeholder="Course">
+                <input type="text" id="s-sem" placeholder="Semester">
+                <button class="btn" onclick="addStudent()">Add Student</button>
+            </div>
+            <table>
+                <thead><tr><th>ID</th><th>Roll No</th><th>Name</th><th>Course</th><th>Semester</th></tr></thead>
+                <tbody id="student-list"></tbody>
+            </table>
+        </div>
+
+        <!-- Rooms Section -->
+        <div id="rooms-section" class="card section-view">
+            <h3>Manage Rooms</h3>
+            <div class="form-group">
+                <input type="text" id="r-no" placeholder="Room Number">
+                <input type="number" id="r-cap" placeholder="Total Capacity">
+                <input type="number" id="r-rows" placeholder="Rows">
+                <input type="number" id="r-cols" placeholder="Columns">
+                <button class="btn btn-success" onclick="addRoom()">Add Room</button>
+            </div>
+            <table>
+                <thead><tr><th>ID</th><th>Room No</th><th>Capacity</th><th>Rows</th><th>Cols</th></tr></thead>
+                <tbody id="room-list"></tbody>
+            </table>
+        </div>
+
+        <!-- Allocation Section -->
+        <div id="allocation-section" class="card section-view">
+            <h3>Seat Allocation</h3>
+            <button class="btn" style="background-color: #F59E0B;" onclick="generateAllocation()">Run Allocation Algorithm</button>
+            <div id="allocation-message" style="margin-top: 1rem; font-weight: bold;"></div>
+            
+            <h4 style="margin-top: 2rem;">Generated Seating Chart</h4>
+            <button class="btn" onclick="loadSeats()" style="margin-bottom:1rem;">Refresh Chart</button>
+            <table>
+                <thead><tr><th>Room</th><th>Row</th><th>Col</th><th>Student Roll No</th><th>Course</th></tr></thead>
+                <tbody id="seat-list"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function showSection(id) {
+            document.querySelectorAll('.section-view').forEach(el => el.classList.remove('active-view'));
+            document.getElementById(id).classList.add('active-view');
+        }
+
+        // Students API
+        async function loadStudents() {
+            const res = await fetch('/api/students');
+            const data = await res.json();
+            const tbody = document.getElementById('student-list');
+            tbody.innerHTML = data.map(s => `<tr><td>${s.id}</td><td>${s.rollNo}</td><td>${s.name}</td><td>${s.course}</td><td>${s.currentSemester}</td></tr>`).join('');
+        }
+        async function addStudent() {
+            const data = {
+                rollNo: document.getElementById('s-roll').value,
+                name: document.getElementById('s-name').value,
+                course: document.getElementById('s-course').value,
+                currentSemester: document.getElementById('s-sem').value
+            };
+            await fetch('/api/students', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+            loadStudents();
+        }
+
+        // Rooms API
+        async function loadRooms() {
+            const res = await fetch('/api/rooms');
+            const data = await res.json();
+            const tbody = document.getElementById('room-list');
+            tbody.innerHTML = data.map(r => `<tr><td>${r.id}</td><td>${r.roomNumber}</td><td>${r.capacity}</td><td>${r.rowsCount}</td><td>${r.columnsCount}</td></tr>`).join('');
+        }
+        async function addRoom() {
+            const data = {
+                roomNumber: document.getElementById('r-no').value,
+                capacity: parseInt(document.getElementById('r-cap').value),
+                rowsCount: parseInt(document.getElementById('r-rows').value),
+                columnsCount: parseInt(document.getElementById('r-cols').value)
+            };
+            await fetch('/api/rooms', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+            loadRooms();
+        }
+
+        // Allocation API
+        async function generateAllocation() {
+            const res = await fetch('/api/allocate', { method: 'POST' });
+            const msg = await res.text();
+            document.getElementById('allocation-message').innerText = msg;
+            loadSeats();
+        }
+        async function loadSeats() {
+            const res = await fetch('/api/seats');
+            const data = await res.json();
+            const tbody = document.getElementById('seat-list');
+            tbody.innerHTML = data.map(s => {
+                const stu = s.allocatedStudent ? s.allocatedStudent.rollNo : 'Unallocated';
+                const course = s.allocatedStudent ? s.allocatedStudent.course : '-';
+                return `<tr><td>${s.room.roomNumber}</td><td>${s.rowNumber}</td><td>${s.columnNumber}</td><td>${stu}</td><td>${course}</td></tr>`;
+            }).join('');
+        }
+    </script>
+</body>
+</html>
