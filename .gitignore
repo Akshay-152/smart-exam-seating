@@ -1,0 +1,4 @@
+target/
+.mvn-tool/
+tools/test/chrome-profile/
+tools/test/*.log

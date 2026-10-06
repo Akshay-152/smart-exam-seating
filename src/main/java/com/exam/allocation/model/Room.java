@@ -1,6 +1,7 @@
 package com.exam.allocation.model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.List;
 
 @Entity
@@ -24,6 +25,9 @@ public class Room {
     @Column(nullable = false)
     private int columnsCount;
 
+    // @JsonIgnore breaks the Seat -> Room -> Seat serialization cycle that
+    // previously made /api/rooms return an infinitely nested JSON payload.
+    @JsonIgnore
     @OneToMany(mappedBy = "room", cascade = CascadeType.ALL)
     private List<Seat> seats;
 

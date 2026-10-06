@@ -19,7 +19,10 @@ public class Seat {
     @JoinColumn(name = "room_id")
     private Room room;
 
-    @OneToOne
+    // Many-to-One: a student can appear in the seating chart of several exams.
+    // (Was @OneToOne, which created a UNIQUE constraint on the column and made
+    //  re-running the allocation fail with a DataIntegrityViolationException.)
+    @ManyToOne
     @JoinColumn(name = "allocated_student_id")
     private Student allocatedStudent;
     

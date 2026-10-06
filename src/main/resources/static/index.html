@@ -11,7 +11,10 @@
             --dark: #1F2937;
             --light: #F3F4F6;
             --text-dark: #111827;
+            --danger: #EF4444;
+            --amber: #F59E0B;
         }
+        * { box-sizing: border-box; }
         body {
             font-family: 'Inter', sans-serif;
             background-color: var(--light);
@@ -28,182 +31,1000 @@
             align-items: center;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        .container {
-            max-width: 1200px;
-            margin: 2rem auto;
-            padding: 0 1rem;
+        .navbar h1 { margin: 0; font-size: 1.3rem; }
+        .navbar .sub { font-size: .85rem; opacity: .85; }
+
+        .tabs {
+            display: flex;
+            gap: .25rem;
+            background: white;
+            padding: .5rem 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+            flex-wrap: wrap;
+            position: sticky;
+            top: 0;
+            z-index: 20;
         }
+        .tab {
+            border: none;
+            background: transparent;
+            padding: .6rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #4B5563;
+            font-size: .92rem;
+        }
+        .tab:hover { background: #EEF2FF; color: var(--primary); }
+        .tab.active { background: var(--primary); color: white; }
+
+        .container { max-width: 1240px; margin: 1.5rem auto; padding: 0 1rem; }
         .card {
             background: white;
             border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            margin-bottom: 2rem;
+            padding: 1.6rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+            margin-bottom: 1.5rem;
         }
+        .card h2, .card h3 { margin-top: 0; }
+
         .btn {
             background-color: var(--primary);
             color: white;
             border: none;
-            padding: 0.75rem 1.5rem;
+            padding: .65rem 1.2rem;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 600;
-            transition: background-color 0.2s;
-            margin-right: 0.5rem;
+            transition: background-color .2s;
+            margin-right: .5rem;
+            margin-bottom: .4rem;
+            font-size: .9rem;
         }
         .btn:hover { background-color: #4338CA; }
         .btn-success { background-color: var(--secondary); }
         .btn-success:hover { background-color: #059669; }
-        
+        .btn-amber { background-color: var(--amber); }
+        .btn-amber:hover { background-color: #D97706; }
+        .btn-ghost { background: #E5E7EB; color: #374151; }
+        .btn-ghost:hover { background: #D1D5DB; }
+        .btn-danger { background: #FEE2E2; color: #B91C1C; }
+        .btn-danger:hover { background: #FECACA; }
+        .btn-sm { padding: .35rem .7rem; font-size: .8rem; margin-right: .3rem; }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
+
         .section-view { display: none; }
-        .active-view { display: block; }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-        th, td {
-            text-align: left;
-            padding: 12px;
-            border-bottom: 1px solid #E5E7EB;
-        }
-        th { background-color: #F9FAFB; }
-        
-        .form-group {
+        .section-view.active-view { display: block; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #E5E7EB; }
+        th { background-color: #F9FAFB; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: #6B7280; }
+        tr:hover td { background: #FAFAFF; }
+        td.actions { white-space: nowrap; text-align: right; }
+
+        .form-row {
             margin-bottom: 1rem;
             display: flex;
-            gap: 1rem;
+            gap: .75rem;
+            flex-wrap: wrap;
+            align-items: flex-end;
         }
-        input {
-            padding: 0.5rem;
+        .field { display: flex; flex-direction: column; gap: .25rem; }
+        .field label { font-size: .75rem; font-weight: 700; color: #6B7280; text-transform: uppercase; }
+        input, select {
+            padding: .55rem .6rem;
             border: 1px solid #D1D5DB;
-            border-radius: 4px;
+            border-radius: 6px;
+            font-size: .92rem;
+            background: white;
+            min-width: 120px;
+        }
+        input:focus, select:focus { outline: 2px solid #C7D2FE; border-color: var(--primary); }
+        .grow { flex: 1; }
+        .hint { font-size: .78rem; color: #6B7280; margin-top: .3rem; }
+
+        .toolbar { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-top: .5rem; }
+        .badge {
+            display: inline-block;
+            padding: .12rem .5rem;
+            border-radius: 999px;
+            font-size: .72rem;
+            font-weight: 700;
+            color: white;
+        }
+        .muted { color: #6B7280; }
+        .empty { padding: 1.5rem; text-align: center; color: #9CA3AF; }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .stat {
+            background: white;
+            border-radius: 12px;
+            padding: 1.1rem 1.2rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,.06);
+            border-top: 4px solid var(--primary);
+        }
+        .stat .num { font-size: 1.9rem; font-weight: 800; }
+        .stat .lbl { font-size: .78rem; color: #6B7280; text-transform: uppercase; letter-spacing: .05em; }
+
+        .message-box {
+            margin-top: .8rem;
+            padding: .75rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            display: none;
+        }
+        .message-box.ok { display: block; background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; }
+        .message-box.err { display: block; background: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; }
+
+        /* ---- seating chart ---- */
+        .room-block { margin-bottom: 1.4rem; }
+        .room-title { font-weight: 800; margin-bottom: .5rem; }
+        .room-title span { font-weight: 500; color: #6B7280; font-size: .85rem; }
+        .grid-scroll { overflow-x: auto; padding-bottom: .3rem; }
+        .seat-grid { display: grid; gap: 4px; min-width: max-content; }
+        .col-label, .row-label, .corner {
+            font-size: .68rem;
+            font-weight: 700;
+            color: #9CA3AF;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .seat {
+            min-width: 84px;
+            height: 62px;
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            padding: 4px;
+            text-align: center;
+        }
+        .seat b { font-size: .85rem; }
+        .seat span { font-size: .7rem; color: #374151; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .seat em { font-style: normal; font-size: .6rem; color: white; border-radius: 999px; padding: 0 .45rem; }
+        .seat.vacant { background: #F3F4F6; color: #9CA3AF; font-size: .72rem; border-style: dashed; }
+        .legend { display: flex; gap: 1rem; flex-wrap: wrap; margin: .4rem 0 1rem; font-size: .8rem; }
+        .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: .35rem; }
+        .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
+        .chip {
+            background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A;
+            padding: .2rem .6rem; border-radius: 999px; font-size: .78rem; font-weight: 600;
+        }
+        .null-chip { background:#F3F4F6; color:#9CA3AF; border:1px dashed #D1D5DB; padding:0 .4rem; border-radius:4px; font-size:.75rem; }
+
+        .dropzone {
+            border: 2px dashed #C7D2FE;
+            border-radius: 12px;
+            padding: 1.4rem;
+            text-align: center;
+            background: #FAFAFF;
+            margin-bottom: 1rem;
+        }
+        .dropzone input[type=file] { border: none; background: transparent; }
+        .import-notes { font-size: .85rem; color: #4B5563; margin: .5rem 0; }
+        .import-notes li { margin-bottom: .2rem; }
+        .count-row { display: flex; gap: .7rem; flex-wrap: wrap; margin: .7rem 0; }
+        .count {
+            background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px;
+            padding: .5rem .8rem; font-size: .85rem;
+        }
+        .count b { font-size: 1.1rem; display: block; }
+
+        #toast {
+            position: fixed;
+            bottom: 18px;
+            right: 18px;
+            max-width: 360px;
+            padding: .8rem 1.1rem;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            font-size: .88rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,.25);
+            display: none;
+            z-index: 99;
+        }
+        #toast.ok { display: block; background: #059669; }
+        #toast.err { display: block; background: #DC2626; }
+
+        @media print {
+            .navbar, .tabs, .no-print, .toolbar, .form-row, #toast { display: none !important; }
+            .card { box-shadow: none; border: 1px solid #ddd; }
+            body { background: white; }
         }
     </style>
 </head>
 <body>
-    <div class="navbar">
+    <div class="navbar no-print">
         <h1>Room Allocation System</h1>
-        <div>Admin Dashboard</div>
+        <div class="sub">Admin Dashboard</div>
     </div>
-    
+
+    <div class="tabs no-print">
+        <button class="tab active" data-section="dashboard" onclick="showSection('dashboard')">Dashboard</button>
+        <button class="tab" data-section="students" onclick="showSection('students')">Students</button>
+        <button class="tab" data-section="rooms" onclick="showSection('rooms')">Rooms</button>
+        <button class="tab" data-section="exams" onclick="showSection('exams')">Exams</button>
+        <button class="tab" data-section="allocation" onclick="showSection('allocation')">Seating Chart</button>
+        <button class="tab" data-section="import" onclick="showSection('import')">Import Data</button>
+    </div>
+
     <div class="container">
-        <div class="card">
-            <h2>Dashboard Controls</h2>
-            <div style="margin-top: 1rem; display: flex; gap: 1rem;">
-                <button class="btn" onclick="showSection('students-section'); loadStudents()">Manage Students</button>
-                <button class="btn btn-success" onclick="showSection('rooms-section'); loadRooms()">Manage Rooms</button>
-                <button class="btn" style="background-color: #F59E0B;" onclick="showSection('allocation-section')">Generate Allocation</button>
+
+        <!-- ============ Dashboard ============ -->
+        <div id="dashboard-section" class="section-view active-view">
+            <div class="stat-grid">
+                <div class="stat"><div class="num" id="stat-students">–</div><div class="lbl">Students</div></div>
+                <div class="stat" style="border-color:#10B981"><div class="num" id="stat-rooms">–</div><div class="lbl">Rooms</div></div>
+                <div class="stat" style="border-color:#F59E0B"><div class="num" id="stat-exams">–</div><div class="lbl">Exams</div></div>
+                <div class="stat" style="border-color:#EC4899"><div class="num" id="stat-seats">–</div><div class="lbl">Seats allotted</div></div>
+            </div>
+            <div class="card">
+                <h2>Dashboard</h2>
+                <div class="toolbar no-print" style="margin-top:1rem">
+                    <button class="btn" onclick="showSection('students')">Manage Students</button>
+                    <button class="btn btn-success" onclick="showSection('rooms')">Manage Rooms</button>
+                    <button class="btn btn-amber" onclick="showSection('exams')">Manage Exams</button>
+                    <button class="btn" style="background-color:#EC4899" onclick="showSection('allocation')">Generate Seating Chart</button>
+                    <button class="btn btn-ghost" onclick="showSection('import')">Import PDF / Excel</button>
+                </div>
+                <p class="hint" style="margin-top:1.2rem">
+                    Typical flow: <b>1)</b> add students (or import a PDF/Excel list) &rarr;
+                    <b>2)</b> add exam rooms &rarr;
+                    <b>3)</b> create an exam (semester, date, application ID) &rarr;
+                    <b>4)</b> generate the seating chart and download it as a PDF.
+                    Press <b>Enter</b> in any form to jump to the next field.
+                </p>
             </div>
         </div>
 
-        <!-- Students Section -->
+        <!-- ============ Students ============ -->
         <div id="students-section" class="card section-view">
             <h3>Manage Students</h3>
-            <div class="form-group">
-                <input type="text" id="s-roll" placeholder="Roll No">
-                <input type="text" id="s-name" placeholder="Name">
-                <input type="text" id="s-course" placeholder="Course">
-                <input type="text" id="s-sem" placeholder="Semester">
-                <button class="btn" onclick="addStudent()">Add Student</button>
+            <form id="student-form" class="form-row" autocomplete="off">
+                <div class="field"><label>Roll No</label><input id="s-roll" enterkeyhint="next" placeholder="e.g. 101"></div>
+                <div class="field grow"><label>Name</label><input id="s-name" enterkeyhint="next" placeholder="Full name"></div>
+                <div class="field"><label>Course</label><input id="s-course" enterkeyhint="next" placeholder="e.g. CSE"></div>
+                <div class="field"><label>Semester</label><input id="s-sem" enterkeyhint="go" placeholder="e.g. S3"></div>
+                <button type="button" class="btn" onclick="addStudent()">Add Student</button>
+            </form>
+            <div class="toolbar no-print">
+                <input id="student-search" placeholder="Search roll no / name / course / semester…" style="min-width:280px"
+                       oninput="renderStudents()">
+                <span class="hint" id="student-count"></span>
             </div>
             <table>
-                <thead><tr><th>ID</th><th>Roll No</th><th>Name</th><th>Course</th><th>Semester</th></tr></thead>
+                <thead><tr><th>Roll No</th><th>Name</th><th>Course</th><th>Semester</th><th class="actions no-print">Actions</th></tr></thead>
                 <tbody id="student-list"></tbody>
             </table>
         </div>
 
-        <!-- Rooms Section -->
+        <!-- ============ Rooms ============ -->
         <div id="rooms-section" class="card section-view">
             <h3>Manage Rooms</h3>
-            <div class="form-group">
-                <input type="text" id="r-no" placeholder="Room Number">
-                <input type="number" id="r-cap" placeholder="Total Capacity">
-                <input type="number" id="r-rows" placeholder="Rows">
-                <input type="number" id="r-cols" placeholder="Columns">
-                <button class="btn btn-success" onclick="addRoom()">Add Room</button>
-            </div>
+            <form id="room-form" class="form-row" autocomplete="off">
+                <div class="field"><label>Room Number</label><input id="r-no" enterkeyhint="next" placeholder="e.g. 121"></div>
+                <div class="field"><label>Rows</label><input id="r-rows" type="number" min="1" enterkeyhint="next" placeholder="5"></div>
+                <div class="field"><label>Columns</label><input id="r-cols" type="number" min="1" enterkeyhint="next" placeholder="3"></div>
+                <div class="field"><label>Capacity</label><input id="r-cap" type="number" min="0" enterkeyhint="go" placeholder="auto"></div>
+                <button type="button" class="btn btn-success" onclick="addRoom()">Add Room</button>
+            </form>
+            <div class="hint">Capacity defaults to rows &times; columns when left empty.</div>
             <table>
-                <thead><tr><th>ID</th><th>Room No</th><th>Capacity</th><th>Rows</th><th>Cols</th></tr></thead>
+                <thead><tr><th>Room No</th><th>Rows</th><th>Columns</th><th>Capacity</th><th>Seats</th><th class="actions no-print">Actions</th></tr></thead>
                 <tbody id="room-list"></tbody>
             </table>
         </div>
 
-        <!-- Allocation Section -->
-        <div id="allocation-section" class="card section-view">
-            <h3>Seat Allocation</h3>
-            <button class="btn" style="background-color: #F59E0B;" onclick="generateAllocation()">Run Allocation Algorithm</button>
-            <div id="allocation-message" style="margin-top: 1rem; font-weight: bold;"></div>
-            
-            <h4 style="margin-top: 2rem;">Generated Seating Chart</h4>
-            <button class="btn" onclick="loadSeats()" style="margin-bottom:1rem;">Refresh Chart</button>
+        <!-- ============ Exams ============ -->
+        <div id="exams-section" class="card section-view">
+            <h3>Manage Exams</h3>
+            <form id="exam-form" class="form-row" autocomplete="off">
+                <div class="field grow"><label>Exam / Subject</label><input id="e-subject" enterkeyhint="next" placeholder="e.g. Data Structures"></div>
+                <div class="field"><label>Course</label><input id="e-course" enterkeyhint="next" placeholder="e.g. CSE (blank = all)"></div>
+                <div class="field"><label>Semester</label>
+                    <select id="e-sem" enterkeyhint="next">
+                        <option value="">All</option>
+                        <option>S1</option><option>S2</option><option>S3</option><option>S4</option>
+                        <option>S5</option><option>S6</option><option>S7</option><option>S8</option>
+                    </select>
+                </div>
+                <div class="field"><label>Date</label><input id="e-date" type="date" enterkeyhint="next"></div>
+                <div class="field"><label>Time</label><input id="e-time" type="time" enterkeyhint="next"></div>
+                <div class="field"><label>Application ID</label>
+                    <input id="e-appid" enterkeyhint="go" placeholder="APP-S3-…" list="app-id-list">
+                    <datalist id="app-id-list"></datalist>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="suggestAppId()" title="Auto-generate">Generate ID</button>
+                <button type="button" class="btn btn-amber" onclick="addExam()">Add Exam</button>
+            </form>
+            <div class="hint">Leave course/semester as &ldquo;All&rdquo; to include every student. Application ID is auto-generated when left blank.</div>
             <table>
-                <thead><tr><th>Room</th><th>Row</th><th>Col</th><th>Student Roll No</th><th>Course</th></tr></thead>
-                <tbody id="seat-list"></tbody>
+                <thead><tr><th>Exam</th><th>Course</th><th>Semester</th><th>Date</th><th>Time</th><th>Application ID</th><th class="actions no-print">Actions</th></tr></thead>
+                <tbody id="exam-list"></tbody>
             </table>
+        </div>
+
+        <!-- ============ Allocation / Chart ============ -->
+        <div id="allocation-section" class="card section-view">
+            <h3>Seating Chart</h3>
+            <div class="form-row no-print">
+                <div class="field">
+                    <label>Exam</label>
+                    <select id="alloc-exam" onchange="onExamSelected()" style="min-width:320px"></select>
+                </div>
+                <button class="btn btn-amber" id="btn-generate" onclick="generateAllocation()">Generate Seating Chart</button>
+                <button class="btn btn-success" id="btn-pdf" onclick="downloadChartPdf()">Download Chart PDF</button>
+                <button class="btn btn-ghost" onclick="window.print()">Print</button>
+                <button class="btn btn-ghost" onclick="loadSeatsForSelected()">Refresh</button>
+            </div>
+            <div id="alloc-stats" class="count-row" style="display:none"></div>
+            <div id="allocation-message" class="message-box"></div>
+
+            <div id="chart-legend" class="legend"></div>
+            <div id="chart-container"><div class="empty">Select an exam and generate the chart.</div></div>
+
+            <div id="unallocated-block" style="display:none">
+                <h4>Not yet seated</h4>
+                <div class="chips" id="unallocated-chips"></div>
+            </div>
+        </div>
+
+        <!-- ============ Import ============ -->
+        <div id="import-section" class="card section-view">
+            <h3>Import Students from PDF / Excel</h3>
+            <div class="dropzone">
+                <input type="file" id="import-file" accept=".pdf,.xlsx,.xls,.csv,.txt">
+                <div class="hint" style="margin-top:.5rem">
+                    Supported: <b>.pdf</b>, <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> &mdash; expected columns:
+                    Roll No, Name, Course, Semester. <b>Missing cells are stored as null.</b>
+                </div>
+                <div style="margin-top:.9rem">
+                    <button class="btn btn-success" onclick="uploadImport()">Upload &amp; Import</button>
+                    <button class="btn btn-ghost" onclick="downloadTemplate()">Download CSV template</button>
+                </div>
+            </div>
+            <div id="import-result" style="display:none">
+                <div class="count-row" id="import-counts"></div>
+                <ul class="import-notes" id="import-notes"></ul>
+                <h4>Preview</h4>
+                <table>
+                    <thead><tr><th>Roll No</th><th>Name</th><th>Course</th><th>Semester</th><th>Missing cells</th></tr></thead>
+                    <tbody id="import-preview"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
+    <div id="toast"></div>
+
     <script>
-        function showSection(id) {
-            document.querySelectorAll('.section-view').forEach(el => el.classList.remove('active-view'));
-            document.getElementById(id).classList.add('active-view');
+    /* ================= helpers ================= */
+    const $ = id => document.getElementById(id);
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const cellText = v => v == null ? '<span class="null-chip">null</span>' : esc(v);
+
+    async function api(url, opts = {}) {
+        const res = await fetch(url, opts);
+        const text = await res.text();
+        let data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+        if (!res.ok) throw new Error((data && data.message) || text || ('HTTP ' + res.status));
+        return data;
+    }
+    const jsonOpts = (method, body) => ({
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body)
+    });
+
+    let toastTimer = null;
+    function toast(msg, isError) {
+        const el = $('toast');
+        el.textContent = msg;
+        el.className = isError ? 'err' : 'ok';
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { el.className = ''; }, 4200);
+    }
+    function setMessage(id, text, isError) {
+        const el = $(id);
+        el.textContent = text;
+        el.className = 'message-box ' + (isError ? 'err' : 'ok');
+    }
+
+    /* Enter in a form field moves focus to the next field; in the last field it
+       runs the given action (add / save). This is the "tap to move to next column". */
+    function wireEnterNav(root, onLast) {
+        root.addEventListener('keydown', e => {
+            if (e.key !== 'Enter') return;
+            if (!e.target.matches('input, select')) return;
+            e.preventDefault();
+            const fields = [...root.querySelectorAll('input, select')].filter(el => !el.disabled && el.type !== 'hidden');
+            const i = fields.indexOf(e.target);
+            if (i > -1 && i < fields.length - 1) {
+                fields[i + 1].focus();
+                if (fields[i + 1].select) fields[i + 1].select();
+            } else {
+                onLast();
+            }
+        });
+    }
+    /* Same behaviour inside inline edit rows (delegated). */
+    document.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' || !e.target.matches('tr input')) return;
+        const row = e.target.closest('tr[data-edit]');
+        if (!row) return;
+        e.preventDefault();
+        const inputs = [...row.querySelectorAll('input')];
+        const i = inputs.indexOf(e.target);
+        if (i > -1 && i < inputs.length - 1) {
+            inputs[i + 1].focus();
+            inputs[i + 1].select();
+        } else {
+            const save = row.querySelector('[data-act="save"]');
+            if (save) save.click();
+        }
+    });
+
+    /* ================= tabs ================= */
+    const loaders = {
+        dashboard: loadDashboard,
+        students: loadStudents,
+        rooms: loadRooms,
+        exams: loadExams,
+        allocation: loadAllocationTab,
+        import: () => {}
+    };
+    function showSection(name) {
+        document.querySelectorAll('.section-view').forEach(el => el.classList.remove('active-view'));
+        $(name + '-section').classList.add('active-view');
+        document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.section === name));
+        try { loaders[name](); } catch (e) { /* noop */ }
+    }
+
+    /* ================= students ================= */
+    let students = [];
+    let editingStudentId = null;
+
+    async function loadStudents() {
+        try {
+            students = await api('/api/students');
+            renderStudents();
+        } catch (e) { toast(e.message, true); }
+    }
+    function renderStudents() {
+        const q = ($('student-search').value || '').toLowerCase();
+        const list = students.filter(s => !q || [s.rollNo, s.name, s.course, s.currentSemester]
+            .some(v => (v || '').toLowerCase().includes(q)));
+        $('student-count').textContent = list.length + ' of ' + students.length + ' students';
+
+        const tbody = $('student-list');
+        if (!list.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty">No students found. Add one above or import a file.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = list.map(s => {
+            if (editingStudentId === s.id) {
+                return `<tr data-edit data-id="${s.id}">
+                    <td><input data-f="rollNo" value="${esc(s.rollNo)}" placeholder="Roll No"></td>
+                    <td><input data-f="name" value="${esc(s.name)}" placeholder="Name"></td>
+                    <td><input data-f="course" value="${esc(s.course)}" placeholder="Course"></td>
+                    <td><input data-f="currentSemester" value="${esc(s.currentSemester)}" placeholder="Semester"></td>
+                    <td class="actions no-print">
+                        <button class="btn btn-sm btn-success" data-act="save" data-id="${s.id}">Save</button>
+                        <button class="btn btn-sm btn-ghost" data-act="cancel" data-id="${s.id}">Cancel</button>
+                    </td></tr>`;
+            }
+            return `<tr>
+                <td>${cellText(s.rollNo)}</td>
+                <td>${cellText(s.name)}</td>
+                <td>${cellText(s.course)}</td>
+                <td>${cellText(s.currentSemester)}</td>
+                <td class="actions no-print">
+                    <button class="btn btn-sm btn-ghost" data-act="edit" data-id="${s.id}">Edit</button>
+                    <button class="btn btn-sm btn-danger" data-act="delete" data-id="${s.id}">Delete</button>
+                </td></tr>`;
+        }).join('');
+    }
+    async function addStudent() {
+        const payload = {
+            rollNo: $('s-roll').value.trim() || null,
+            name: $('s-name').value.trim() || null,
+            course: $('s-course').value.trim() || null,
+            currentSemester: $('s-sem').value.trim() || null
+        };
+        if (!payload.rollNo && !payload.name) { toast('Enter at least a roll no or a name.', true); $('s-roll').focus(); return; }
+        try {
+            await api('/api/students', jsonOpts('POST', payload));
+            ['s-roll', 's-name', 's-course', 's-sem'].forEach(id => $(id).value = '');
+            $('s-roll').focus();
+            toast('Student added.');
+            await loadStudents();
+        } catch (e) { toast(e.message, true); }
+    }
+    $('student-list').addEventListener('click', async e => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const id = Number(btn.dataset.id);
+        try {
+            if (btn.dataset.act === 'edit') { editingStudentId = id; renderStudents(); }
+            else if (btn.dataset.act === 'cancel') { editingStudentId = null; renderStudents(); }
+            else if (btn.dataset.act === 'save') {
+                const row = btn.closest('tr[data-edit]');
+                const payload = {};
+                row.querySelectorAll('input').forEach(inp => payload[inp.dataset.f] = inp.value.trim() || null);
+                await api('/api/students/' + id, jsonOpts('PUT', payload));
+                editingStudentId = null;
+                toast('Student updated.');
+                await loadStudents();
+            } else if (btn.dataset.act === 'delete') {
+                if (!confirm('Delete this student?')) return;
+                await api('/api/students/' + id, jsonOpts('DELETE'));
+                toast('Student deleted.');
+                await loadStudents();
+            }
+        } catch (err) { toast(err.message, true); }
+    });
+
+    /* ================= rooms ================= */
+    let rooms = [];
+    let editingRoomId = null;
+
+    async function loadRooms() {
+        try {
+            rooms = await api('/api/rooms');
+            renderRooms();
+        } catch (e) { toast(e.message, true); }
+    }
+    function renderRooms() {
+        const tbody = $('room-list');
+        if (!rooms.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty">No rooms yet. Add the first exam room above.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rooms.map(r => {
+            const seats = r.rowsCount * r.columnsCount;
+            if (editingRoomId === r.id) {
+                return `<tr data-edit data-id="${r.id}">
+                    <td><input data-f="roomNumber" value="${esc(r.roomNumber)}" placeholder="Room No"></td>
+                    <td><input data-f="rowsCount" type="number" min="1" value="${r.rowsCount}"></td>
+                    <td><input data-f="columnsCount" type="number" min="1" value="${r.columnsCount}"></td>
+                    <td><input data-f="capacity" type="number" min="0" value="${r.capacity}"></td>
+                    <td>${seats}</td>
+                    <td class="actions no-print">
+                        <button class="btn btn-sm btn-success" data-act="save" data-id="${r.id}">Save</button>
+                        <button class="btn btn-sm btn-ghost" data-act="cancel" data-id="${r.id}">Cancel</button>
+                    </td></tr>`;
+            }
+            return `<tr>
+                <td><b>${esc(r.roomNumber)}</b></td>
+                <td>${r.rowsCount}</td>
+                <td>${r.columnsCount}</td>
+                <td>${r.capacity}</td>
+                <td>${seats}</td>
+                <td class="actions no-print">
+                    <button class="btn btn-sm btn-ghost" data-act="edit" data-id="${r.id}">Edit</button>
+                    <button class="btn btn-sm btn-danger" data-act="delete" data-id="${r.id}">Delete</button>
+                </td></tr>`;
+        }).join('');
+    }
+    function roomCapacity() {
+        const rows = parseInt($('r-rows').value, 10);
+        const cols = parseInt($('r-cols').value, 10);
+        return (rows > 0 && cols > 0) ? rows * cols : 0;
+    }
+    async function addRoom() {
+        const rows = parseInt($('r-rows').value, 10);
+        const cols = parseInt($('r-cols').value, 10);
+        const payload = {
+            roomNumber: $('r-no').value.trim() || null,
+            rowsCount: rows || 1,
+            columnsCount: cols || 1,
+            capacity: parseInt($('r-cap').value, 10) || roomCapacity() || rows * cols || 1
+        };
+        if (!payload.roomNumber) { toast('Enter a room number.', true); $('r-no').focus(); return; }
+        try {
+            await api('/api/rooms', jsonOpts('POST', payload));
+            ['r-no', 'r-rows', 'r-cols', 'r-cap'].forEach(id => $(id).value = '');
+            $('r-no').focus();
+            toast('Room added.');
+            await loadRooms();
+        } catch (e) { toast(e.message, true); }
+    }
+    $('room-list').addEventListener('click', async e => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const id = Number(btn.dataset.id);
+        try {
+            if (btn.dataset.act === 'edit') { editingRoomId = id; renderRooms(); }
+            else if (btn.dataset.act === 'cancel') { editingRoomId = null; renderRooms(); }
+            else if (btn.dataset.act === 'save') {
+                const row = btn.closest('tr[data-edit]');
+                const payload = {
+                    roomNumber: (row.querySelector('[data-f="roomNumber"]').value || '').trim() || null,
+                    rowsCount: Number(row.querySelector('[data-f="rowsCount"]').value) || 1,
+                    columnsCount: Number(row.querySelector('[data-f="columnsCount"]').value) || 1,
+                    capacity: Number(row.querySelector('[data-f="capacity"]').value) || 0
+                };
+                await api('/api/rooms/' + id, jsonOpts('PUT', payload));
+                editingRoomId = null;
+                toast('Room updated.');
+                await loadRooms();
+            } else if (btn.dataset.act === 'delete') {
+                if (!confirm('Delete this room and all of its seats?')) return;
+                await api('/api/rooms/' + id, jsonOpts('DELETE'));
+                toast('Room deleted.');
+                await loadRooms();
+            }
+        } catch (err) { toast(err.message, true); }
+    });
+
+    /* ================= exams ================= */
+    let exams = [];
+    let editingExamId = null;
+
+    async function loadExams() {
+        try {
+            exams = await api('/api/exams');
+            renderExams();
+        } catch (e) { toast(e.message, true); }
+    }
+    function fmtDate(d) { return d || '-'; }
+    function fmtTime(t) { return t ? String(t).slice(0, 5) : '-'; }
+    function renderExams() {
+        const tbody = $('exam-list');
+        if (!exams.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">No exams yet. Create one above (e.g. semester S3 exam).</td></tr>';
+            return;
+        }
+        tbody.innerHTML = exams.map(x => {
+            if (editingExamId === x.id) {
+                return `<tr data-edit data-id="${x.id}">
+                    <td><input data-f="subjectName" value="${esc(x.subjectName)}" placeholder="Exam / Subject"></td>
+                    <td><input data-f="course" value="${esc(x.course)}" placeholder="Course"></td>
+                    <td><input data-f="semester" value="${esc(x.semester)}" placeholder="S3"></td>
+                    <td><input data-f="examDate" type="date" value="${esc(x.examDate)}"></td>
+                    <td><input data-f="examTime" type="time" value="${x.examTime ? String(x.examTime).slice(0, 5) : ''}"></td>
+                    <td><input data-f="applicationId" value="${esc(x.applicationId)}" placeholder="App ID"></td>
+                    <td class="actions no-print">
+                        <button class="btn btn-sm btn-success" data-act="save" data-id="${x.id}">Save</button>
+                        <button class="btn btn-sm btn-ghost" data-act="cancel" data-id="${x.id}">Cancel</button>
+                    </td></tr>`;
+            }
+            const sem = x.semester ? `<span class="badge" style="background:#4F46E5">${esc(x.semester)}</span>` : '<span class="muted">All</span>';
+            return `<tr>
+                <td><b>${esc(x.subjectName)}</b></td>
+                <td>${esc(x.course) || '<span class="muted">All</span>'}</td>
+                <td>${sem}</td>
+                <td>${fmtDate(x.examDate)}</td>
+                <td>${fmtTime(x.examTime)}</td>
+                <td>${cellText(x.applicationId)}</td>
+                <td class="actions no-print">
+                    <button class="btn btn-sm btn-ghost" data-act="edit" data-id="${x.id}">Edit</button>
+                    <button class="btn btn-sm btn-danger" data-act="delete" data-id="${x.id}">Delete</button>
+                </td></tr>`;
+        }).join('');
+    }
+    function suggestAppId() {
+        const sem = ($('e-sem').value || 'EX').toUpperCase();
+        const date = ($('e-date').value || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+        $('e-appid').value = `APP-${sem}-${date}-${String(exams.length + 1).padStart(3, '0')}`;
+    }
+    async function addExam() {
+        const payload = {
+            subjectName: $('e-subject').value.trim() || null,
+            course: $('e-course').value.trim() || null,
+            semester: $('e-sem').value.trim() || null,
+            examDate: $('e-date').value || null,
+            examTime: $('e-time').value || null,
+            applicationId: $('e-appid').value.trim() || null
+        };
+        if (!payload.subjectName) { toast('Enter the exam / subject name.', true); $('e-subject').focus(); return; }
+        if (!payload.examDate) { toast('Pick the exam date.', true); $('e-date').focus(); return; }
+        if (!payload.applicationId) {
+            const sem = (payload.semester || 'EX').toUpperCase();
+            const date = payload.examDate.replace(/-/g, '');
+            payload.applicationId = `APP-${sem}-${date}-${String(exams.length + 1).padStart(3, '0')}`;
+        }
+        try {
+            await api('/api/exams', jsonOpts('POST', payload));
+            ['e-subject', 'e-course', 'e-date', 'e-time', 'e-appid'].forEach(id => $(id).value = '');
+            $('e-subject').focus();
+            toast('Exam created: ' + payload.applicationId);
+            await loadExams();
+        } catch (e) { toast(e.message, true); }
+    }
+    $('exam-list').addEventListener('click', async e => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const id = Number(btn.dataset.id);
+        try {
+            if (btn.dataset.act === 'edit') { editingExamId = id; renderExams(); }
+            else if (btn.dataset.act === 'cancel') { editingExamId = null; renderExams(); }
+            else if (btn.dataset.act === 'save') {
+                const row = btn.closest('tr[data-edit]');
+                const payload = {};
+                row.querySelectorAll('input').forEach(inp => payload[inp.dataset.f] = inp.value.trim() || null);
+                await api('/api/exams/' + id, jsonOpts('PUT', payload));
+                editingExamId = null;
+                toast('Exam updated.');
+                await loadExams();
+            } else if (btn.dataset.act === 'delete') {
+                if (!confirm('Delete this exam and its seating chart?')) return;
+                await api('/api/exams/' + id, jsonOpts('DELETE'));
+                toast('Exam deleted.');
+                await loadExams();
+            }
+        } catch (err) { toast(err.message, true); }
+    });
+
+    /* ================= allocation / chart ================= */
+    let seats = [];
+    let selectedExamId = null;
+
+    const PALETTE = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#0EA5E9', '#A855F7', '#EC4899', '#14B8A6'];
+    function courseColor(course) {
+        const key = course || 'Unspecified';
+        let hash = 0;
+        for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+        return PALETTE[hash % PALETTE.length];
+    }
+
+    async function loadAllocationTab() {
+        try {
+            [exams, students] = await Promise.all([api('/api/exams'), api('/api/students')]);
+            const select = $('alloc-exam');
+            const previous = selectedExamId;
+            select.innerHTML = exams.length
+                ? exams.map(x => `<option value="${x.id}">${esc(x.subjectName)}${x.semester ? ' — ' + esc(x.semester) : ''}${x.examDate ? ' — ' + x.examDate : ''}</option>`).join('')
+                : '<option value="">No exams yet — create one in the Exams tab</option>';
+            if (exams.length) {
+                const stillThere = previous && exams.some(x => x.id === previous);
+                select.value = stillThere ? previous : exams[exams.length - 1].id;
+                selectedExamId = Number(select.value);
+            } else {
+                selectedExamId = null;
+            }
+            $('btn-generate').disabled = !selectedExamId;
+            $('btn-pdf').disabled = !selectedExamId;
+            await loadSeatsForSelected();
+        } catch (e) { toast(e.message, true); }
+    }
+    function onExamSelected() {
+        selectedExamId = Number($('alloc-exam').value) || null;
+        $('allocation-message').className = 'message-box';
+        loadSeatsForSelected();
+    }
+    function currentExam() {
+        return exams.find(x => x.id === selectedExamId) || null;
+    }
+    async function loadSeatsForSelected() {
+        if (!selectedExamId) {
+            seats = [];
+            renderChart();
+            return;
+        }
+        try {
+            seats = await api('/api/seats?examId=' + selectedExamId);
+            renderChart();
+        } catch (e) { toast(e.message, true); }
+    }
+    async function generateAllocation() {
+        if (!selectedExamId) { toast('Create an exam first.', true); return; }
+        try {
+            const res = await api('/api/allocate', jsonOpts('POST', { examId: selectedExamId }));
+            setMessage('allocation-message', res.message, !res.success);
+            await loadSeatsForSelected();
+        } catch (e) { setMessage('allocation-message', e.message, true); }
+    }
+
+    function matchesExam(s, exam) {
+        if (!exam) return true;
+        const c = (exam.course || '').trim().toLowerCase();
+        if (c && c !== 'all' && c !== '*' && c !== 'all courses') {
+            if (c !== (s.course || '').trim().toLowerCase()) return false;
+        }
+        const es = (exam.semester || '').trim().toLowerCase();
+        if (es && es !== 'all' && es !== '*') {
+            const want = es.replace(/\D/g, '');
+            const have = (s.currentSemester || '').replace(/\D/g, '');
+            if (want && have) { if (want !== have) return false; }
+            else if (es !== (s.currentSemester || '').trim().toLowerCase()) return false;
+        }
+        return true;
+    }
+
+    function renderChart() {
+        const container = $('chart-container');
+        const legend = $('chart-legend');
+        if (!seats.length) {
+            container.innerHTML = '<div class="empty">No chart yet for this exam. Click <b>Generate Seating Chart</b>.</div>';
+            legend.innerHTML = '';
+            $('alloc-stats').style.display = 'none';
+            $('unallocated-block').style.display = 'none';
+            return;
         }
 
-        // Students API
-        async function loadStudents() {
-            const res = await fetch('/api/students');
-            const data = await res.json();
-            const tbody = document.getElementById('student-list');
-            tbody.innerHTML = data.map(s => `<tr><td>${s.id}</td><td>${s.rollNo}</td><td>${s.name}</td><td>${s.course}</td><td>${s.currentSemester}</td></tr>`).join('');
-        }
-        async function addStudent() {
-            const data = {
-                rollNo: document.getElementById('s-roll').value,
-                name: document.getElementById('s-name').value,
-                course: document.getElementById('s-course').value,
-                currentSemester: document.getElementById('s-sem').value
-            };
-            await fetch('/api/students', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-            loadStudents();
-        }
+        const groups = new Map();
+        seats.forEach(s => {
+            const rid = (s.room && s.room.id) != null ? s.room.id : 0;
+            if (!groups.has(rid)) groups.set(rid, { room: s.room, seats: [] });
+            groups.get(rid).seats.push(s);
+        });
 
-        // Rooms API
-        async function loadRooms() {
-            const res = await fetch('/api/rooms');
-            const data = await res.json();
-            const tbody = document.getElementById('room-list');
-            tbody.innerHTML = data.map(r => `<tr><td>${r.id}</td><td>${r.roomNumber}</td><td>${r.capacity}</td><td>${r.rowsCount}</td><td>${r.columnsCount}</td></tr>`).join('');
-        }
-        async function addRoom() {
-            const data = {
-                roomNumber: document.getElementById('r-no').value,
-                capacity: parseInt(document.getElementById('r-cap').value),
-                rowsCount: parseInt(document.getElementById('r-rows').value),
-                columnsCount: parseInt(document.getElementById('r-cols').value)
-            };
-            await fetch('/api/rooms', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-            loadRooms();
-        }
+        const counts = {};
+        let allocated = 0;
+        seats.forEach(s => {
+            if (!s.allocatedStudent) return;
+            allocated++;
+            const c = s.allocatedStudent.course || 'Unspecified';
+            counts[c] = (counts[c] || 0) + 1;
+        });
 
-        // Allocation API
-        async function generateAllocation() {
-            const res = await fetch('/api/allocate', { method: 'POST' });
-            const msg = await res.text();
-            document.getElementById('allocation-message').innerText = msg;
-            loadSeats();
+        let html = '';
+        for (const group of groups.values()) {
+            const room = group.room || {};
+            const cols = room.columnsCount || Math.max(...group.seats.map(s => s.columnNumber));
+            const rows = room.rowsCount || Math.max(...group.seats.map(s => s.rowNumber));
+            const map = new Map(group.seats.map(s => [s.rowNumber + ':' + s.columnNumber, s]));
+            html += `<div class="room-block">
+                <div class="room-title">Room ${esc(room.roomNumber)} <span>${rows} &times; ${cols} &middot; ${group.seats.length} seats</span></div>
+                <div class="grid-scroll"><div class="seat-grid" style="grid-template-columns:36px repeat(${cols}, minmax(84px,1fr))">
+                <div class="corner"></div>`;
+            for (let c = 1; c <= cols; c++) html += `<div class="col-label">C${c}</div>`;
+            for (let r = 1; r <= rows; r++) {
+                html += `<div class="row-label">R${r}</div>`;
+                for (let c = 1; c <= cols; c++) {
+                    const seat = map.get(r + ':' + c);
+                    const stu = seat && seat.allocatedStudent;
+                    if (stu) {
+                        const color = courseColor(stu.course);
+                        html += `<div class="seat" style="border-top:3px solid ${color}">
+                            <b>${esc(stu.rollNo) || '?'}</b>
+                            <span title="${esc(stu.name)}">${esc(stu.name) || '-'}</span>
+                            <em style="background:${color}">${esc(stu.course) || '-'}</em>
+                        </div>`;
+                    } else {
+                        html += '<div class="seat vacant">Vacant</div>';
+                    }
+                }
+            }
+            html += '</div></div></div>';
         }
-        async function loadSeats() {
-            const res = await fetch('/api/seats');
-            const data = await res.json();
-            const tbody = document.getElementById('seat-list');
-            tbody.innerHTML = data.map(s => {
-                const stu = s.allocatedStudent ? s.allocatedStudent.rollNo : 'Unallocated';
-                const course = s.allocatedStudent ? s.allocatedStudent.course : '-';
-                return `<tr><td>${s.room.roomNumber}</td><td>${s.rowNumber}</td><td>${s.columnNumber}</td><td>${stu}</td><td>${course}</td></tr>`;
-            }).join('');
+        container.innerHTML = html;
+
+        legend.innerHTML = Object.keys(counts).length
+            ? Object.entries(counts).map(([c, n]) =>
+                `<span><span class="dot" style="background:${courseColor(c)}"></span>${esc(c)} (${n})</span>`).join('')
+            : '';
+
+        // stats + unallocated chips
+        const exam = currentExam();
+        const eligible = students.filter(s => matchesExam(s, exam));
+        const seatedIds = new Set(seats.filter(s => s.allocatedStudent).map(s => s.allocatedStudent.id));
+        const pending = eligible.filter(s => !seatedIds.has(s.id));
+
+        const stats = $('alloc-stats');
+        stats.style.display = 'flex';
+        stats.innerHTML = `
+            <div class="count"><b>${allocated}</b> seated</div>
+            <div class="count"><b>${eligible.length}</b> eligible students</div>
+            <div class="count"><b>${groups.size}</b> rooms used</div>
+            <div class="count"><b>${seats.length - allocated}</b> vacant seats</div>`;
+
+        const block = $('unallocated-block');
+        if (pending.length) {
+            block.style.display = 'block';
+            $('unallocated-chips').innerHTML = pending.map(s =>
+                `<span class="chip">${esc(s.rollNo) || '?'} · ${esc(s.name) || '-'}</span>`).join('');
+        } else {
+            block.style.display = 'none';
         }
+    }
+
+    async function downloadChartPdf() {
+        if (!selectedExamId) { toast('Create an exam first.', true); return; }
+        await downloadFile('/api/chart/pdf?examId=' + selectedExamId, 'seating-chart.pdf');
+    }
+    async function downloadFile(url, fallback) {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) {
+                const text = await res.text();
+                let msg = text;
+                try { msg = JSON.parse(text).message; } catch (e) { /* keep raw */ }
+                throw new Error(msg || ('HTTP ' + res.status));
+            }
+            const blob = await res.blob();
+            const cd = res.headers.get('Content-Disposition') || '';
+            const m = /filename="?([^";]+)"?/.exec(cd);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = m ? m[1] : fallback;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        } catch (e) { toast(e.message, true); }
+    }
+
+    /* ================= import ================= */
+    async function uploadImport() {
+        const input = $('import-file');
+        if (!input.files.length) { toast('Choose a PDF or Excel file first.', true); return; }
+        const fd = new FormData();
+        fd.append('file', input.files[0]);
+        try {
+            const res = await api('/api/import/students', { method: 'POST', body: fd });
+            renderImportResult(res);
+            toast(`Imported ${res.imported}, updated ${res.updated}, skipped ${res.skipped}.`);
+            input.value = '';
+            students = await api('/api/students');
+        } catch (e) { toast(e.message, true); }
+    }
+    function renderImportResult(res) {
+        $('import-result').style.display = 'block';
+        $('import-counts').innerHTML = `
+            <div class="count"><b>${res.imported}</b> new students</div>
+            <div class="count"><b>${res.updated}</b> updated</div>
+            <div class="count"><b>${res.skipped}</b> rows skipped</div>
+            <div class="count"><b>${res.missingCells}</b> cells stored as null</div>`;
+        $('import-notes').innerHTML = (res.notes || []).map(n => `<li>${esc(n)}</li>`).join('');
+        const tbody = $('import-preview');
+        if (!res.preview || !res.preview.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty">No rows imported.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = res.preview.map(p => `<tr>
+            <td>${cellText(p.rollNo)}</td><td>${cellText(p.name)}</td>
+            <td>${cellText(p.course)}</td><td>${cellText(p.currentSemester)}</td>
+            <td>${cellText(p.missing)}</td></tr>`).join('');
+    }
+    function downloadTemplate() {
+        const csv = 'roll no,name,course,semester\n101,Ananya Sharma,CSE,S3\n102,Rahul Verma,ECE,\n103,,CSE,S3\n';
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'student-import-template.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
+    /* ================= dashboard ================= */
+    async function loadDashboard() {
+        try {
+            const [s, r, e, allSeats] = await Promise.all([
+                api('/api/students'), api('/api/rooms'), api('/api/exams'), api('/api/seats')
+            ]);
+            $('stat-students').textContent = s.length;
+            $('stat-rooms').textContent = r.length;
+            $('stat-exams').textContent = e.length;
+            $('stat-seats').textContent = allSeats.filter(x => x.allocatedStudent).length;
+        } catch (err) { toast(err.message, true); }
+    }
+
+    /* ================= init ================= */
+    wireEnterNav($('student-form'), addStudent);
+    wireEnterNav($('room-form'), addRoom);
+    wireEnterNav($('exam-form'), addExam);
+
+    // Capacity auto-fills from rows x columns when left empty.
+    ['r-rows', 'r-cols'].forEach(id => $(id).addEventListener('change', () => {
+        if (!$('r-cap').value) $('r-cap').value = roomCapacity() || '';
+    }));
+
+    loadDashboard();
     </script>
 </body>
 </html>

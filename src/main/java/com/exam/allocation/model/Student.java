@@ -9,16 +9,14 @@ public class Student {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true, nullable = false)
+    // Fields are nullable so that imports (PDF/Excel) with missing cells can be stored as null
+    @Column(unique = true)
     private String rollNo;
 
-    @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
     private String course;
-    
-    @Column(nullable = false)
+
     private String currentSemester;
 
     // Default constructor
