@@ -38,6 +38,9 @@ public class AllocationService {
     @Autowired
     private ExamRepository examRepository;
 
+    @Autowired
+    private ConflictService conflictService;
+
     /** Result of an allocation run, returned as JSON to the frontend. */
     public static class AllocationResult {
         private boolean success;
@@ -46,6 +49,7 @@ public class AllocationService {
         private int allocated;
         private int unallocated;
         private int roomsUsed;
+        private List<String> conflicts = new ArrayList<>();
 
         public boolean isSuccess() { return success; }
         public void setSuccess(boolean success) { this.success = success; }
@@ -59,14 +63,16 @@ public class AllocationService {
         public void setUnallocated(int unallocated) { this.unallocated = unallocated; }
         public int getRoomsUsed() { return roomsUsed; }
         public void setRoomsUsed(int roomsUsed) { this.roomsUsed = roomsUsed; }
+        public List<String> getConflicts() { return conflicts; }
+        public void setConflicts(List<String> conflicts) { this.conflicts = conflicts; }
     }
 
     /**
      * Core Algorithm: Generates the seating chart for a given exam across the given rooms.
      *
-     * - Only students matching the exam's course/semester are seated (blank = "all").
-     * - Students from different courses are interleaved round-robin so that students of
-     *   the same course are spread out instead of sitting in an adjacent block.
+     * - Only students matching the exam's branch/batch are seated (blank = "all").
+     * - Students from different branch/batch groups are interleaved round-robin so that
+     *   students of the same group are spread out instead of sitting in an adjacent block.
      * - Any previous chart for the same exam is cleared first, so the operation can be
      *   re-run safely (the old implementation crashed with a unique-constraint error).
      */
@@ -89,13 +95,13 @@ public class AllocationService {
         result.setEligibleStudents(eligible.size());
 
         if (eligible.isEmpty()) {
-            result.setMessage("No students match this exam (course: " + valueOrAll(exam.getCourse())
-                    + ", semester: " + valueOrAll(exam.getSemester()) + ").");
+            result.setMessage("No students match this exam (batch/course: " + valueOrAll(exam.getCourse())
+                    + ", branch: " + valueOrAll(exam.getBranch()) + ").");
             return result;
         }
 
         Map<String, List<Student>> studentsByCourse = eligible.stream()
-                .collect(Collectors.groupingBy(AllocationService::courseKey, LinkedHashMap::new, Collectors.toList()));
+                .collect(Collectors.groupingBy(AllocationService::groupKey, LinkedHashMap::new, Collectors.toList()));
         List<Student> sequence = interleave(studentsByCourse);
 
         // Work queue holding the exact existing round-robin order; every desk draws
@@ -142,6 +148,15 @@ public class AllocationService {
                .append(" student(s) could not be seated - add more rooms or larger rooms.");
         }
         result.setMessage(msg.toString());
+
+        // Scheduling conflicts: students or rooms booked twice in this time slot.
+        List<Seat> seated = new ArrayList<>();
+        for (Room room : rooms) {
+            seated.addAll(seatRepository.findByRoomId(room.getId()).stream()
+                    .filter(s -> s.getExam() != null && exam.getId().equals(s.getExam().getId()))
+                    .collect(Collectors.toList()));
+        }
+        result.setConflicts(conflictService.allocationWarnings(exam, seated));
         return result;
     }
 
@@ -167,7 +182,7 @@ public class AllocationService {
         // Look ahead far enough to see every course that is still available, so a
         // different subject just past the desk's own slice can still be pulled in.
         int distinctRemaining = (int) queue.stream()
-                .map(AllocationService::courseKey)
+                .map(AllocationService::groupKey)
                 .map(c -> c.toLowerCase())
                 .distinct()
                 .count();
@@ -181,14 +196,14 @@ public class AllocationService {
         for (int k = 0; k < needed && !window.isEmpty(); k++) {
             int chosen = -1;
             for (int j = 0; j < window.size(); j++) {
-                if (!coursesAtDesk.contains(courseKey(window.get(j)).toLowerCase())) {
-                    chosen = j;   // a subject not yet sitting at this desk
+                if (!coursesAtDesk.contains(groupKey(window.get(j)).toLowerCase())) {
+                    chosen = j;   // a branch/batch not yet sitting at this desk
                     break;
                 }
             }
-            if (chosen == -1) chosen = 0;   // all remaining courses already present: keep sequence order
+            if (chosen == -1) chosen = 0;   // all remaining groups already present: keep sequence order
             Student student = window.remove(chosen);
-            coursesAtDesk.add(courseKey(student).toLowerCase());
+            coursesAtDesk.add(groupKey(student).toLowerCase());
             picked.add(student);
         }
 
@@ -277,37 +292,38 @@ public class AllocationService {
         return out;
     }
 
-    /** True when the student belongs to the audience of this exam (course + semester). */
+    /** True when the student belongs to the audience of this exam (branch + batch/course). */
     private boolean matchesExam(Student student, Exam exam) {
-        return courseMatches(student.getCourse(), exam.getCourse())
-                && semesterMatches(student.getCurrentSemester(), exam.getSemester());
+        return branchMatches(student.getBranch(), exam.getBranch())
+                && courseMatches(student, exam);
     }
 
-    private boolean courseMatches(String studentCourse, String examCourse) {
-        String wanted = norm(examCourse);
-        if (wanted.isEmpty() || wanted.equals("all") || wanted.equals("*") || wanted.equals("all courses")) {
-            return true;
-        }
-        return wanted.equals(norm(studentCourse));
+    private boolean branchMatches(String studentBranch, String examBranch) {
+        String wanted = norm(examBranch);
+        if (isAll(wanted)) return true;
+        return wanted.equals(norm(studentBranch));
     }
 
-    private boolean semesterMatches(String studentSem, String examSem) {
-        String wanted = norm(examSem);
-        if (wanted.isEmpty() || wanted.equals("all") || wanted.equals("*")) {
-            return true;
-        }
-        // Compare "S3" and "3" and "sem 3" as equal by their digits when both sides have digits.
-        String wantedDigits = wanted.replaceAll("\\D", "");
-        String studentDigits = norm(studentSem).replaceAll("\\D", "");
-        if (!wantedDigits.isEmpty() && !studentDigits.isEmpty()) {
-            return wantedDigits.equals(studentDigits);
-        }
-        return wanted.equals(norm(studentSem));
+    /**
+     * The exam's batch/course matches the student's batch first; a branch of the
+     * same name also matches so imported/legacy "course" values keep working.
+     */
+    private boolean courseMatches(Student student, Exam exam) {
+        String wanted = norm(exam.getCourse());
+        if (isAll(wanted)) return true;
+        return wanted.equals(norm(student.getBatch())) || wanted.equals(norm(student.getBranch()));
     }
 
-    private static String courseKey(Student s) {
-        String course = s.getCourse();
-        return (course == null || course.isBlank()) ? "Unspecified" : course.trim();
+    private boolean isAll(String norm) {
+        return norm.isEmpty() || norm.equals("all") || norm.equals("*")
+                || norm.equals("any") || norm.equals("all courses");
+    }
+
+    /** Grouping key used for interleaving, desk mixing, colours and the PDF legend. */
+    public static String groupKey(Student s) {
+        String branch = (s.getBranch() == null || s.getBranch().isBlank()) ? "Unbranched" : s.getBranch().trim();
+        String batch = (s.getBatch() == null || s.getBatch().isBlank()) ? "Unbatched" : s.getBatch().trim();
+        return branch + "\u00b7" + batch;
     }
 
     private String norm(String v) { return v == null ? "" : v.trim().toLowerCase(); }

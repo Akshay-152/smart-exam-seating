@@ -3,6 +3,7 @@
 const DEBUG = 'http://127.0.0.1:9333';
 const APP = 'http://localhost:8081/';
 const XLSX = 'C:\\programing\\java project\\tools\\test\\test-students.xlsx';
+const EXAM_XLSX = 'C:\\programing\\java project\\tools\\test\\test-exams.xlsx';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -86,6 +87,8 @@ try {
     document.querySelector('.tab[data-section="students"]').click();
     await sleep(700);
     out.rows = document.querySelectorAll('#student-list tr').length;
+    for (let i = 0; i < 30 && !$('s-batch').options.length; i++) await sleep(100); // batch dropdown seeded
+    out.batchOptions = $('s-batch').options.length;
 
     // Enter in first field moves to second field
     $('s-roll').focus();
@@ -93,8 +96,8 @@ try {
     out.enterMovesToName = document.activeElement.id === 's-name';
 
     // Fill form and press Enter in the last field -> adds the student
-    $('s-roll').value = '555'; $('s-name').value = 'UI Test'; $('s-course').value = 'CSE'; $('s-sem').value = 'S3';
-    $('s-sem').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    $('s-roll').value = '555'; $('s-name').value = 'UI Test'; $('s-branch').value = 'CSE'; $('s-batch').value = 'C';
+    $('s-batch').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await sleep(1200);
     out.added = document.querySelector('#student-list').textContent.includes('555');
     out.formCleared = $('s-roll').value === '';
@@ -123,6 +126,7 @@ try {
     return out;
   })()`);
   check('students table renders', results.students.rows > 0, 'rows=' + results.students.rows);
+  check('batch dropdown has defaults A-G', results.students.batchOptions >= 7, 'options=' + results.students.batchOptions);
   check('Enter moves to next field', results.students.enterMovesToName);
   check('Enter in last field adds student', results.students.added && results.students.formCleared);
   check('edit row renders with inputs', results.students.editRendered);
@@ -171,6 +175,41 @@ try {
   check('room created & form reset', results.rooms.added && results.rooms.formReset);
   check('test room cleaned up', results.rooms.deleted);
 
+  // ---------- courses / batches: defaults, add custom, delete ----------
+  results.batches = await evaluate(`(async () => {
+    const $ = id => document.getElementById(id);
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    document.querySelector('.tab[data-section="courses"]').click();
+    await sleep(800);
+    for (let i = 0; i < 30 && !document.querySelectorAll('#batch-list tr').length; i++) await sleep(100);
+    out.rows = document.querySelectorAll('#batch-list tr').length;
+    const names = [...document.querySelectorAll('#batch-list tr')].map(tr => (tr.querySelector('td')?.textContent || '').trim());
+    out.defaults = ['A','B','C','D','E','F','G'].every(x => names.includes(x));
+
+    $('c-name').value = 'Z';
+    [...document.querySelectorAll('#batch-form button')].find(b => b.textContent.includes('Add Course')).click();
+    await sleep(1300);
+    const namesAfter = [...document.querySelectorAll('#batch-list tr')].map(tr => (tr.querySelector('td')?.textContent || '').trim());
+    out.added = namesAfter.includes('Z');
+    out.selectHasZ = [...$('s-batch').options].some(o => o.value === 'Z');
+    out.examSelectHasZ = [...$('e-course').options].some(o => o.value === 'Z');
+
+    const del = [...document.querySelectorAll('#batch-list tr')]
+      .find(tr => (tr.querySelector('td')?.textContent || '').trim() === 'Z')
+      ?.querySelector('button[data-act="delete-batch"]');
+    if (del) { del.click(); await sleep(1300); }
+    const namesFinal = [...document.querySelectorAll('#batch-list tr')].map(tr => (tr.querySelector('td')?.textContent || '').trim());
+    out.deleted = !namesFinal.includes('Z');
+    return out;
+  })()`);
+  check('batches tab lists defaults A-G', results.batches.rows >= 7 && results.batches.defaults,
+        JSON.stringify({ rows: results.batches.rows, defaults: results.batches.defaults }));
+  check('Add Course creates a custom batch available to forms',
+        results.batches.added && results.batches.selectHasZ && results.batches.examSelectHasZ,
+        JSON.stringify({ added: results.batches.added, studentSelect: results.batches.selectHasZ, examSelect: results.batches.examSelectHasZ }));
+  check('custom batch deleted', results.batches.deleted);
+
   // ---------- exams: create with auto application id ----------
   results.exams = await evaluate(`(async () => {
     const $ = id => document.getElementById(id);
@@ -179,22 +218,25 @@ try {
     document.querySelector('.tab[data-section="exams"]').click();
     await sleep(700);
     out.rows = document.querySelectorAll('#exam-list tr').length;
+    for (let i = 0; i < 30 && !$('e-course').options.length; i++) await sleep(100); // batch dropdown seeded
 
     $('e-subject').value = 'Physics';
-    $('e-sem').value = 'S5';
+    $('e-course').value = 'B';
     $('e-date').value = '2026-12-01';
     $('e-time').value = '09:30';
     [...document.querySelectorAll('#exam-form button')].find(b => b.textContent.includes('Add Exam')).click();
     await sleep(1200);
     out.rowsAfter = document.querySelectorAll('#exam-list tr').length;
     const text = document.querySelector('#exam-list').textContent;
-    out.created = text.includes('Physics') && text.includes('S5');
-    out.appIdAuto = /APP-S5-20261201-\\d{3}/.test(text);
+    out.created = text.includes('Physics') && text.includes('B');
+    out.appIdAuto = /APP-B-20261201-\\d{3}/.test(text);
+    out.noConflictsShown = $('exam-conflicts').style.display === 'none';
     return out;
   })()`);
   check('exams tab lists exams', results.exams.rows >= 1, 'rows=' + results.exams.rows);
   check('exam created via form', results.exams.created);
   check('application ID auto-generated', results.exams.appIdAuto);
+  check('no conflict warning for non-clashing exam', results.exams.noConflictsShown);
 
   // ---------- seating chart ----------
   results.chart = await evaluate(`(async () => {
@@ -258,15 +300,17 @@ try {
     }
     out.statsText = document.getElementById('alloc-stats').textContent.replace(/\\s+/g, ' ').trim();
     out.pdf = await fetch('/api/chart/pdf?examId=1').then(r => r.status).catch(() => 0);
+    const labels = [...first.querySelectorAll('.slot i')].map(i => i.textContent.trim());
+    out.groupsDistinct = labels.length === 2 && labels[0] !== labels[1];
+    out.rolls = [...first.querySelectorAll('.slot b')].map(b => b.textContent.trim()).join(',');
     return out;
   })()`);
   check('room saved with students per desk = 2', results.shared.editRendered && results.shared.saved);
   check('chart renders shared desks (multi-slot cells)', results.shared.multiCells >= 1,
         'multi=' + results.shared.multiCells);
-  check('first desk holds exactly 2 students',
-        results.shared.slots === 2 && results.shared.fullSlots === 2 &&
-        results.shared.firstCell.includes('101') && results.shared.firstCell.includes('102'),
-        results.shared.firstCell);
+  check('first desk holds exactly 2 students from different groups',
+        results.shared.slots === 2 && results.shared.fullSlots === 2 && results.shared.groupsDistinct,
+        'rolls=' + results.shared.rolls + ' cell=' + results.shared.firstCell);
   check('stats count desks', (results.shared.statsText || '').includes('desks'), results.shared.statsText);
   check('chart PDF works for shared desks', results.shared.pdf === 200, 'status=' + results.shared.pdf);
 
@@ -293,6 +337,70 @@ try {
   })()`);
   check('import UI shows result', results.importResult.visible && results.importResult.previewRows > 0,
         JSON.stringify(results.importResult));
+
+  // ---------- exam data upload (Excel) + validation + conflict detection ----------
+  await evaluate(`(async () => {
+    [...document.querySelectorAll('#import-section button')].find(b => b.textContent.includes('Exam Data')).click();
+  })()`);
+  await sleep(400);
+  const doc2 = await send('DOM.getDocument', { depth: 0 });
+  const examFileNode = await send('DOM.querySelector', { nodeId: doc2.root.nodeId, selector: '#exam-import-file' });
+  await send('DOM.setFileInputFiles', { files: [EXAM_XLSX], nodeId: examFileNode.nodeId });
+  results.examImport = await evaluate(`(async () => {
+    const $ = id => document.getElementById(id);
+    [...document.querySelectorAll('#import-mode-exams button')].find(b => b.textContent.includes('Upload Exam Data')).click();
+    for (let i = 0; i < 40 && $('exam-import-result').style.display === 'none'; i++) await new Promise(r => setTimeout(r, 250));
+    return {
+      visible: $('exam-import-result').style.display !== 'none',
+      counts: $('exam-import-counts').textContent.replace(/\\s+/g, ' ').trim(),
+      notes: $('exam-import-notes').textContent.replace(/\\s+/g, ' ').trim(),
+      conflicts: $('exam-import-conflicts').textContent.replace(/\\s+/g, ' ').trim(),
+      previewRows: document.querySelectorAll('#exam-import-preview tr').length
+    };
+  })()`);
+  check('exam import UI shows result', results.examImport.visible && results.examImport.previewRows > 0,
+        JSON.stringify(results.examImport));
+  check('invalid exam row rejected', /1 invalid/.test(results.examImport.counts), results.examImport.counts);
+  check('exam import reports scheduling clash', results.examImport.conflicts.includes('Clash'),
+        results.examImport.conflicts);
+
+  // ---------- allocation conflict warnings (double-booked students/rooms) ----------
+  results.allocConflict = await evaluate(`(async () => {
+    const $ = id => document.getElementById(id);
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    document.querySelector('.tab[data-section="allocation"]').click();
+    await sleep(1000);
+    const opts = [...$('alloc-exam').options];
+    const math = opts.find(o => o.textContent.includes('Mathematics'));
+    const phys = opts.find(o => o.textContent.includes('Physics') && o.textContent.includes('2026-12-05'));
+    out.hasExams = !!math && !!phys;
+    if (!out.hasExams) return out;
+
+    $('alloc-exam').value = math.value;
+    $('alloc-exam').dispatchEvent(new Event('change'));
+    await sleep(800);
+    document.getElementById('btn-generate').click();
+    await sleep(1600);
+    out.firstOk = $('allocation-message').className.includes('ok');
+
+    $('alloc-exam').value = phys.value;
+    $('alloc-exam').dispatchEvent(new Event('change'));
+    await sleep(800);
+    document.getElementById('btn-generate').click();
+    await sleep(1800);
+    out.message = $('allocation-message').textContent;
+    out.ok = $('allocation-message').className.includes('ok');
+    out.conflictsShown = $('alloc-conflicts').style.display !== 'none';
+    out.conflicts = $('alloc-conflicts').textContent.replace(/\\s+/g, ' ').trim();
+    return out;
+  })()`);
+  check('both clashing exams can be allocated',
+        results.allocConflict.hasExams && results.allocConflict.firstOk && results.allocConflict.ok,
+        results.allocConflict.message);
+  check('allocation shows double-booking warnings',
+        results.allocConflict.conflictsShown && results.allocConflict.conflicts.includes('seated in both'),
+        results.allocConflict.conflicts);
 
 } catch (e) {
   failed++;

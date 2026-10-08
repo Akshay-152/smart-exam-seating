@@ -15,17 +15,17 @@ delete_all exams
 delete_all rooms
 delete_all students
 
-for s in '101|Ananya Sharma|CSE|S3' '102|Rahul|ECE|S3' '103|Priya Sharma|CSE|s3' '104|Karthik|MECH|S3'; do
-  IFS='|' read -r r n c m <<< "$s"
+for s in '101|Ananya Sharma|CSE|A' '102|Rahul|ECE|B' '103|Priya Sharma|CSE|A' '104|Karthik|MECH|C'; do
+  IFS='|' read -r r n b m <<< "$s"
   curl -s -X POST "$B/students" -H 'Content-Type: application/json' \
-    -d "{\"rollNo\":\"$r\",\"name\":\"$n\",\"course\":\"$c\",\"currentSemester\":\"$m\"}" -o /dev/null
+    -d "{\"rollNo\":\"$r\",\"name\":\"$n\",\"branch\":\"$b\",\"batch\":\"$m\"}" -o /dev/null
 done
 curl -s -X POST "$B/rooms" -H 'Content-Type: application/json' \
   -d '{"roomNumber":"121","capacity":20,"rowsCount":5,"columnsCount":3}' -o /dev/null
 curl -s -X POST "$B/rooms" -H 'Content-Type: application/json' \
   -d '{"roomNumber":"122","capacity":30,"rowsCount":6,"columnsCount":5}' -o /dev/null
 curl -s -X POST "$B/exams" -H 'Content-Type: application/json' \
-  -d '{"subjectName":"Data Structures","semester":"S3","examDate":"2026-11-02","examTime":"10:00","applicationId":"APP-S3-20261102-001"}' -o /dev/null
+  -d '{"subjectName":"Data Structures","branch":"","course":"","examDate":"2026-11-02","examTime":"10:00","applicationId":"APP-20261102-001"}' -o /dev/null
 
 # baseline chart
 curl -s -X POST "$B/allocate" -H 'Content-Type: application/json' -d '{"examId":1}' -o /dev/null

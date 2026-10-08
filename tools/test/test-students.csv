@@ -1,4 +1,4 @@
-roll no,name,course,semester
-301,Gopal Rao,CSE,
-302,,ECE,S5
-303,Manoj K,MECH,
+roll no,name,branch,batch
+301,Gopal Rao,CEC,A
+302,,CEC,B
+303,Manoj K,MEC,

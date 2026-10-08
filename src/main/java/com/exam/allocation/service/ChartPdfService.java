@@ -3,6 +3,7 @@ package com.exam.allocation.service;
 import com.exam.allocation.model.Exam;
 import com.exam.allocation.model.Seat;
 import com.exam.allocation.model.Student;
+import com.exam.allocation.service.AllocationService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -77,6 +78,8 @@ public class ChartPdfService {
                 drawRoom(cursor, roomSeats, courses);
             }
 
+            drawRoster(cursor, exam, seats);
+
             cursor.cs.close();
             drawFooters(document);
 
@@ -111,8 +114,8 @@ public class ChartPdfService {
         cursor.y -= 24;
         centered(cs, cursor.y, value(exam.getSubjectName(), "Exam"), PDType1Font.HELVETICA_BOLD, 13);
         cursor.y -= 18;
-        String meta = "Semester: " + value(exam.getSemester(), "-")
-                + "     Course: " + value(exam.getCourse(), "-")
+        String meta = "Branch: " + value(exam.getBranch(), "All")
+                + "     Batch/Course: " + value(exam.getCourse(), "All")
                 + "     Date: " + value(exam.getExamDate() == null ? null : exam.getExamDate().toString(), "-")
                 + "     Time: " + value(exam.getExamTime() == null ? null : exam.getExamTime().toString(), "-")
                 + "     Application ID: " + value(exam.getApplicationId(), "-");
@@ -139,10 +142,10 @@ public class ChartPdfService {
         cs.beginText();
         cs.setFont(PDType1Font.HELVETICA_BOLD, 8);
         cs.newLineAtOffset(MARGIN, cursor.y);
-        cs.showText("Courses:");
+        cs.showText("Branch \u00b7 Batch:");
         cs.endText();
 
-        float x = MARGIN + 54;
+        float x = MARGIN + 84;
         for (Map.Entry<String, Integer[]> entry : courses.entrySet()) {
             Integer[] rgb = entry.getValue();
             fillRgb(cs, rgb[0], rgb[1], rgb[2]);
@@ -253,7 +256,7 @@ public class ChartPdfService {
 
         if (single) {
             int[] rgb = singleStudent == null ? new int[]{243, 244, 246}
-                    : colorFor(singleStudent.getCourse(), courses);
+                    : colorFor(singleStudent, courses);
             fillRgb(cs, rgb[0], rgb[1], rgb[2]);
         } else {
             fillRgb(cs, 255, 255, 255);
@@ -272,7 +275,7 @@ public class ChartPdfService {
                 centeredAt(cs, x + w / 2, y + h / 2 - 3, "VACANT", PDType1Font.HELVETICA, 7);
                 return;
             }
-            int[] rgb = colorFor(singleStudent.getCourse(), courses);
+            int[] rgb = colorFor(singleStudent, courses);
             boolean dark = rgb[0] + rgb[1] + rgb[2] < 400;
             fillRgb(cs, dark ? 255 : 17, dark ? 255 : 24, dark ? 255 : 39);
             centeredAt(cs, x + w / 2, y + h - 15,
@@ -280,7 +283,7 @@ public class ChartPdfService {
             centeredAt(cs, x + w / 2, y + h - 27,
                     fit(singleStudent.getName(), (int) Math.max(4, w / 4.6)), PDType1Font.HELVETICA, 7.5f);
             centeredAt(cs, x + w / 2, y + 6,
-                    fit(singleStudent.getCourse(), (int) Math.max(4, w / 4.0)), PDType1Font.HELVETICA, 6.5f);
+                    fit(groupLabel(singleStudent), (int) Math.max(4, w / 4.0)), PDType1Font.HELVETICA, 6.5f);
             return;
         }
 
@@ -303,7 +306,7 @@ public class ChartPdfService {
                 continue;
             }
 
-            int[] rgb = colorFor(student.getCourse(), courses);
+            int[] rgb = colorFor(student, courses);
             fillRgb(cs, rgb[0], rgb[1], rgb[2]);
             cs.addRect(x + 2, innerY, 3, innerH);   // course-coloured position bar
             cs.fill();
@@ -323,9 +326,9 @@ public class ChartPdfService {
             cs.showText(roll);
             cs.endText();
 
-            // Subject of this student, right-aligned in the slot so every desk
-            // clearly shows which course each of its students belongs to.
-            String course = sanitize(fit(student.getCourse(), 7));
+            // Branch \u00b7 Batch of this student, right-aligned in the slot so every
+            // desk clearly shows which group each of its students belongs to.
+            String course = sanitize(fit(groupLabel(student), 8));
             float courseW;
             try {
                 courseW = PDType1Font.HELVETICA.getStringWidth(course) / 1000f * 6f;
@@ -348,6 +351,158 @@ public class ChartPdfService {
             cs.newLineAtOffset(courseX, textY);
             cs.showText(course);
             cs.endText();
+        }
+    }
+
+    // -------------------------------------------------- student roster table
+
+    /** Column widths of the roster table (fits the landscape A4 text area). */
+    private static final float[] ROSTER_W = {64f, 210f, 110f, 110f, 90f, 96f};
+    private static final String[] ROSTER_HEAD = {
+            "Roll No", "Name", "Branch", "Batch / Course", "Room", "Seat"};
+    private static final float ROSTER_ROW_H = 15f;
+
+    /**
+     * Draws the "Student List" table required by the specification:
+     * Roll Number | Name | Branch | Batch/Course (+ room/seat of the assignment)
+     * for every student seated in this exam.
+     */
+    private void drawRoster(Cursor cursor, Exam exam, List<Seat> seats) throws IOException {
+        List<Seat> seated = new ArrayList<>();
+        for (Seat seat : seats) {
+            if (seat.getAllocatedStudent() != null) seated.add(seat);
+        }
+        if (seated.isEmpty()) return;
+
+        seated.sort(Comparator.comparing((Seat s) -> AllocationService.groupKey(s.getAllocatedStudent()))
+                .thenComparing(ChartPdfService::rollSortKey));
+
+        ensureSpace(cursor, 90);
+        cursor.y -= 16;
+
+        PDPageContentStream cs = cursor.cs;
+        strokeRgb(cs, 79, 70, 229);
+        cs.setLineWidth(1.2f);
+        cs.moveTo(MARGIN, cursor.y);
+        cs.lineTo(PAGE_W - MARGIN, cursor.y);
+        cs.stroke();
+        strokeRgb(cs, 0, 0, 0);
+        cursor.y -= 20;
+
+        centered(cs, cursor.y, "STUDENT LIST", PDType1Font.HELVETICA_BOLD, 14);
+        cursor.y -= 17;
+        String sub = value(exam.getSubjectName(), "Exam")
+                + "   -   " + value(exam.getExamDate() == null ? null : exam.getExamDate().toString(), "-")
+                + "   " + value(exam.getExamTime() == null ? null : exam.getExamTime().toString(), "-")
+                + "   -   " + seated.size() + " student(s)";
+        centered(cs, cursor.y, sub, PDType1Font.HELVETICA, 9);
+        cursor.y -= 18;
+
+        float[] xs = rosterXs();
+        drawRosterHeader(cursor, xs);
+        cursor.y -= ROSTER_ROW_H;
+
+        int i = 0;
+        for (Seat seat : seated) {
+            if (ensureSpace(cursor, ROSTER_ROW_H)) {
+                drawRosterHeader(cursor, xs);
+                cursor.y -= ROSTER_ROW_H;
+            }
+            drawRosterRow(cursor, xs, rosterValues(seat), i % 2 == 1);
+            cursor.y -= ROSTER_ROW_H;
+            i++;
+        }
+        cursor.y -= 8;
+    }
+
+    private float[] rosterXs() {
+        float[] xs = new float[ROSTER_W.length];
+        float x = MARGIN;
+        for (int i = 0; i < ROSTER_W.length; i++) {
+            xs[i] = x;
+            x += ROSTER_W[i];
+        }
+        return xs;
+    }
+
+    private void drawRosterHeader(Cursor cursor, float[] xs) throws IOException {
+        PDPageContentStream cs = cursor.cs;
+        float top = cursor.y;
+        float bottom = top - ROSTER_ROW_H;
+        fillRgb(cs, 79, 70, 229);
+        cs.addRect(xs[0], bottom, totalRosterWidth(), ROSTER_ROW_H);
+        cs.fill();
+        fillRgb(cs, 255, 255, 255);
+        for (int i = 0; i < ROSTER_HEAD.length; i++) {
+            cs.beginText();
+            cs.setFont(PDType1Font.HELVETICA_BOLD, 8);
+            cs.newLineAtOffset(xs[i] + 5, bottom + 4.5f);
+            cs.showText(sanitize(ROSTER_HEAD[i]));
+            cs.endText();
+        }
+        fillRgb(cs, 0, 0, 0);
+    }
+
+    private void drawRosterRow(Cursor cursor, float[] xs, String[] values, boolean shaded)
+            throws IOException {
+        PDPageContentStream cs = cursor.cs;
+        float top = cursor.y;
+        float bottom = top - ROSTER_ROW_H;
+        if (shaded) {
+            fillRgb(cs, 249, 250, 251);
+            cs.addRect(xs[0], bottom, totalRosterWidth(), ROSTER_ROW_H);
+            cs.fill();
+        }
+        fillRgb(cs, 17, 24, 39);
+        for (int i = 0; i < values.length && i < xs.length; i++) {
+            int maxChars = Math.max(4, (int) (ROSTER_W[i] / 5.2f));
+            cs.beginText();
+            cs.setFont(i == 0 ? PDType1Font.HELVETICA_BOLD : PDType1Font.HELVETICA, 7.5f);
+            cs.newLineAtOffset(xs[i] + 5, bottom + 4.5f);
+            cs.showText(sanitize(fit(values[i], maxChars)));
+            cs.endText();
+        }
+        strokeRgb(cs, 229, 231, 235);
+        cs.setLineWidth(0.5f);
+        cs.moveTo(xs[0], bottom);
+        cs.lineTo(xs[0] + totalRosterWidth(), bottom);
+        cs.stroke();
+        strokeRgb(cs, 0, 0, 0);
+    }
+
+    private float totalRosterWidth() {
+        float total = 0;
+        for (float w : ROSTER_W) total += w;
+        return total;
+    }
+
+    /** Roll No | Name | Branch | Batch | Room | Seat for one seated student. */
+    private String[] rosterValues(Seat seat) {
+        Student student = seat.getAllocatedStudent();
+        String room = seat.getRoom() == null ? "-" : seat.getRoom().getRoomNumber();
+        String seatRef = "R" + seat.getRowNumber() + " C" + seat.getColumnNumber();
+        if (seat.getRoom() != null && seat.getRoom().getStudentsPerDesk() > 1) {
+            seatRef += " P" + seat.getDeskPosition();
+        }
+        return new String[]{
+                value(student.getRollNo(), "-"),
+                value(student.getName(), "-"),
+                value(student.getBranch(), "-"),
+                value(student.getBatch(), "-"),
+                room,
+                seatRef
+        };
+    }
+
+    /** Numeric-aware roll number sort key so "2" comes before "10". */
+    private static String rollSortKey(Seat seat) {
+        String roll = seat.getAllocatedStudent().getRollNo();
+        if (roll == null || roll.isBlank()) return "\uffff";
+        String trimmed = roll.trim();
+        try {
+            return String.format("%012d", Long.parseLong(trimmed));
+        } catch (NumberFormatException ex) {
+            return "\ufffe" + trimmed;
         }
     }
 
@@ -381,8 +536,7 @@ public class ChartPdfService {
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (Seat seat : seats) {
             if (seat.getAllocatedStudent() == null) continue;
-            String course = seat.getAllocatedStudent().getCourse();
-            course = (course == null || course.isBlank()) ? "Unspecified" : course.trim();
+            String course = AllocationService.groupKey(seat.getAllocatedStudent());
             counts.merge(course, 1, (a, b) -> a + b);
         }
         int i = 0;
@@ -394,10 +548,19 @@ public class ChartPdfService {
         return map;
     }
 
-    private int[] colorFor(String course, Map<String, Integer[]> courses) {
-        String key = (course == null || course.isBlank()) ? "Unspecified" : course.trim();
+    private int[] colorFor(Student student, Map<String, Integer[]> courses) {
+        String key = AllocationService.groupKey(student);
         Integer[] rgb = courses.get(key);
         return rgb == null ? new int[]{79, 70, 229} : new int[]{rgb[0], rgb[1], rgb[2]};
+    }
+
+    /** Compact "CEC\u00b7E" label (branch\u00b7batch) used inside seat cells. */
+    private String groupLabel(Student student) {
+        String branch = (student.getBranch() == null || student.getBranch().isBlank())
+                ? "-" : student.getBranch().trim();
+        String batch = (student.getBatch() == null || student.getBatch().isBlank())
+                ? "-" : student.getBatch().trim();
+        return branch + "\u00b7" + batch;
     }
 
     private void centered(PDPageContentStream cs, float y, String text,

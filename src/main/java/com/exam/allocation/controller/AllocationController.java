@@ -56,8 +56,8 @@ public class AllocationController {
         ensureRollNoFree(student.getRollNo(), id);
         existing.setRollNo(student.getRollNo());
         existing.setName(student.getName());
-        existing.setCourse(student.getCourse());
-        existing.setCurrentSemester(student.getCurrentSemester());
+        existing.setBranch(student.getBranch());
+        existing.setBatch(student.getBatch());
         return studentRepository.save(existing);
     }
 

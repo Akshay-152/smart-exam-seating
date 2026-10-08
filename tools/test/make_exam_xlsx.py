@@ -1,11 +1,12 @@
 import zipfile, os
 
-# rows: list of cell values (None = missing cell)
+# Exam-data fixture: valid rows + one row with an unparseable date (validation test).
 ROWS = [
-    ["roll no", "name", "branch", "batch"],
-    ["201", "Meera Nair", "CEC", "A"],
-    ["202", "Vikram", None, "B"],      # missing branch
-    ["203", None, "MEC", None],        # missing name + batch
+    ["subject", "branch", "batch", "date", "time"],
+    ["Mathematics", None, None, "05/12/2026", "10:00"],   # clashes with Physics (same slot)
+    ["Physics", None, None, "05/12/2026", "10:00"],       # clashes with Mathematics
+    ["Chemistry", "MEC", "B", "06/12/2026", "14:00"],
+    ["History", "MEC", "B", "99/99/2026", "09:00"],       # invalid date -> rejected
 ]
 
 def col_letter(i):
@@ -32,7 +33,7 @@ sheet = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
 workbook = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            '<sheets><sheet name="Students" sheetId="1" r:id="rId1"/></sheets></workbook>')
+            '<sheets><sheet name="Exams" sheetId="1" r:id="rId1"/></sheets></workbook>')
 
 wb_rels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
@@ -71,7 +72,7 @@ styles = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
           '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'
           '</styleSheet>')
 
-out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test-students.xlsx")
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test-exams.xlsx")
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
     z.writestr("[Content_Types].xml", content_types)
     z.writestr("_rels/.rels", root_rels)

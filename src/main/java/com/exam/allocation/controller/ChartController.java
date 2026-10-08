@@ -58,8 +58,10 @@ public class ChartController {
 
     private String pdfFileName(Exam exam) {
         StringBuilder name = new StringBuilder("seating-chart");
-        if (exam.getSemester() != null && !exam.getSemester().isBlank()) {
-            name.append('-').append(sanitize(exam.getSemester()));
+        String group = exam.getCourse() != null && !exam.getCourse().isBlank()
+                ? exam.getCourse() : exam.getBranch();
+        if (group != null && !group.isBlank()) {
+            name.append('-').append(sanitize(group));
         }
         if (exam.getSubjectName() != null && !exam.getSubjectName().isBlank()) {
             name.append('-').append(sanitize(exam.getSubjectName()));

@@ -9,5 +9,6 @@ import java.util.List;
 @Repository
 public interface StudentRepository extends JpaRepository<Student, Long> {
     Student findByRollNo(String rollNo);
-    List<Student> findByCourse(String course);
+    List<Student> findByBatch(String batch);
+    long countByBatch(String batch);
 }

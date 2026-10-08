@@ -191,7 +191,7 @@
         }
         .seat b { font-size: .85rem; }
         .seat span { font-size: .7rem; color: #374151; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .seat em { font-style: normal; font-size: .6rem; color: white; border-radius: 999px; padding: 0 .45rem; }
+        .seat em { font-style: normal; font-size: .6rem; color: white; border-radius: 999px; padding: 0 .45rem; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .seat.vacant { background: #F3F4F6; color: #9CA3AF; font-size: .72rem; border-style: dashed; }
         .seat.multi { justify-content: flex-start; gap: 3px; padding: 4px; }
         .slot {
@@ -264,6 +264,7 @@
         <button class="tab active" data-section="dashboard" onclick="showSection('dashboard')">Dashboard</button>
         <button class="tab" data-section="students" onclick="showSection('students')">Students</button>
         <button class="tab" data-section="rooms" onclick="showSection('rooms')">Rooms</button>
+        <button class="tab" data-section="courses" onclick="showSection('courses')">Courses</button>
         <button class="tab" data-section="exams" onclick="showSection('exams')">Exams</button>
         <button class="tab" data-section="allocation" onclick="showSection('allocation')">Seating Chart</button>
         <button class="tab" data-section="import" onclick="showSection('import')">Import Data</button>
@@ -276,6 +277,7 @@
             <div class="stat-grid">
                 <div class="stat"><div class="num" id="stat-students">–</div><div class="lbl">Students</div></div>
                 <div class="stat" style="border-color:#10B981"><div class="num" id="stat-rooms">–</div><div class="lbl">Rooms</div></div>
+                <div class="stat" style="border-color:#14B8A6"><div class="num" id="stat-batches">–</div><div class="lbl">Batches</div></div>
                 <div class="stat" style="border-color:#F59E0B"><div class="num" id="stat-exams">–</div><div class="lbl">Exams</div></div>
                 <div class="stat" style="border-color:#EC4899"><div class="num" id="stat-seats">–</div><div class="lbl">Seats allotted</div></div>
             </div>
@@ -284,15 +286,16 @@
                 <div class="toolbar no-print" style="margin-top:1rem">
                     <button class="btn" onclick="showSection('students')">Manage Students</button>
                     <button class="btn btn-success" onclick="showSection('rooms')">Manage Rooms</button>
+                    <button class="btn" style="background-color:#14B8A6" onclick="showSection('courses')">Courses / Batches</button>
                     <button class="btn btn-amber" onclick="showSection('exams')">Manage Exams</button>
                     <button class="btn" style="background-color:#EC4899" onclick="showSection('allocation')">Generate Seating Chart</button>
                     <button class="btn btn-ghost" onclick="showSection('import')">Import PDF / Excel</button>
                 </div>
                 <p class="hint" style="margin-top:1.2rem">
-                    Typical flow: <b>1)</b> add students (or import a PDF/Excel list) &rarr;
-                    <b>2)</b> add exam rooms &rarr;
-                    <b>3)</b> create an exam (semester, date, application ID) &rarr;
-                    <b>4)</b> generate the seating chart and download it as a PDF.
+                    Typical flow: <b>1)</b> add students (Roll No, Name, Branch, Batch) or import a PDF/Excel list &rarr;
+                    <b>2)</b> add exam rooms &rarr; <b>3)</b> create batches/courses (defaults A&ndash;G, plus your own) &rarr;
+                    <b>4)</b> upload exam data as PDF/Excel or create exams manually &rarr;
+                    <b>5)</b> generate the seating chart and download it as a PDF (with student list).
                     Press <b>Enter</b> in any form to jump to the next field.
                 </p>
             </div>
@@ -301,20 +304,21 @@
         <!-- ============ Students ============ -->
         <div id="students-section" class="card section-view">
             <h3>Manage Students</h3>
+            <p class="hint">Student information: <b>Roll Number, Name, Branch, Batch/Course</b> (no division field).</p>
             <form id="student-form" class="form-row" autocomplete="off">
                 <div class="field"><label>Roll No</label><input id="s-roll" enterkeyhint="next" placeholder="e.g. 101"></div>
                 <div class="field grow"><label>Name</label><input id="s-name" enterkeyhint="next" placeholder="Full name"></div>
-                <div class="field"><label>Course</label><input id="s-course" enterkeyhint="next" placeholder="e.g. CSE"></div>
-                <div class="field"><label>Semester</label><input id="s-sem" enterkeyhint="go" placeholder="e.g. S3"></div>
+                <div class="field"><label>Branch</label><input id="s-branch" enterkeyhint="next" placeholder="e.g. CEC" list="branch-list"><datalist id="branch-list"></datalist></div>
+                <div class="field"><label>Batch / Course</label><select id="s-batch" enterkeyhint="go"></select></div>
                 <button type="button" class="btn" onclick="addStudent()">Add Student</button>
             </form>
             <div class="toolbar no-print">
-                <input id="student-search" placeholder="Search roll no / name / course / semester…" style="min-width:280px"
+                <input id="student-search" placeholder="Search roll no / name / branch / batch…" style="min-width:280px"
                        oninput="renderStudents()">
                 <span class="hint" id="student-count"></span>
             </div>
             <table>
-                <thead><tr><th>Roll No</th><th>Name</th><th>Course</th><th>Semester</th><th class="actions no-print">Actions</th></tr></thead>
+                <thead><tr><th>Roll No</th><th>Name</th><th>Branch</th><th>Batch / Course</th><th class="actions no-print">Actions</th></tr></thead>
                 <tbody id="student-list"></tbody>
             </table>
         </div>
@@ -338,31 +342,45 @@
             </table>
         </div>
 
+        <!-- ============ Courses / Batches ============ -->
+        <div id="courses-section" class="card section-view">
+            <h3>Courses / Batches</h3>
+            <p class="hint">Default batches: <b>A, B, C, D, E, F, G</b>. Use <b>Add Course</b> to create additional
+                custom batches/courses &mdash; they immediately become available in the student form, the exam form
+                and the timetable (seating) generation.</p>
+            <form id="batch-form" class="form-row" autocomplete="off">
+                <div class="field"><label>New Batch / Course</label><input id="c-name" enterkeyhint="go" placeholder="e.g. H"></div>
+                <button type="button" class="btn btn-success" onclick="addBatch()">Add Course</button>
+            </form>
+            <table>
+                <thead><tr><th>Batch / Course</th><th>Type</th><th>Students</th><th class="actions no-print">Actions</th></tr></thead>
+                <tbody id="batch-list"></tbody>
+            </table>
+        </div>
+
         <!-- ============ Exams ============ -->
         <div id="exams-section" class="card section-view">
             <h3>Manage Exams</h3>
             <form id="exam-form" class="form-row" autocomplete="off">
                 <div class="field grow"><label>Exam / Subject</label><input id="e-subject" enterkeyhint="next" placeholder="e.g. Data Structures"></div>
-                <div class="field"><label>Course</label><input id="e-course" enterkeyhint="next" placeholder="e.g. CSE (blank = all)"></div>
-                <div class="field"><label>Semester</label>
-                    <select id="e-sem" enterkeyhint="next">
-                        <option value="">All</option>
-                        <option>S1</option><option>S2</option><option>S3</option><option>S4</option>
-                        <option>S5</option><option>S6</option><option>S7</option><option>S8</option>
-                    </select>
+                <div class="field"><label>Branch</label><input id="e-branch" enterkeyhint="next" placeholder="e.g. CEC (blank = all)"></div>
+                <div class="field"><label>Batch / Course</label>
+                    <select id="e-course" enterkeyhint="next"></select>
                 </div>
                 <div class="field"><label>Date</label><input id="e-date" type="date" enterkeyhint="next"></div>
                 <div class="field"><label>Time</label><input id="e-time" type="time" enterkeyhint="next"></div>
                 <div class="field"><label>Application ID</label>
-                    <input id="e-appid" enterkeyhint="go" placeholder="APP-S3-…" list="app-id-list">
+                    <input id="e-appid" enterkeyhint="go" placeholder="APP-E-…" list="app-id-list">
                     <datalist id="app-id-list"></datalist>
                 </div>
                 <button type="button" class="btn btn-ghost btn-sm" onclick="suggestAppId()" title="Auto-generate">Generate ID</button>
                 <button type="button" class="btn btn-amber" onclick="addExam()">Add Exam</button>
             </form>
-            <div class="hint">Leave course/semester as &ldquo;All&rdquo; to include every student. Application ID is auto-generated when left blank.</div>
+            <div class="hint">Leave branch/batch as &ldquo;All&rdquo; to include every student. Application ID is auto-generated when left blank.
+                Exams can also be uploaded as PDF/Excel from the <b>Import Data</b> tab.</div>
+            <div id="exam-conflicts" class="message-box" style="display:none"></div>
             <table>
-                <thead><tr><th>Exam</th><th>Course</th><th>Semester</th><th>Date</th><th>Time</th><th>Application ID</th><th class="actions no-print">Actions</th></tr></thead>
+                <thead><tr><th>Exam</th><th>Branch</th><th>Batch / Course</th><th>Date</th><th>Time</th><th>Application ID</th><th class="actions no-print">Actions</th></tr></thead>
                 <tbody id="exam-list"></tbody>
             </table>
         </div>
@@ -382,6 +400,7 @@
             </div>
             <div id="alloc-stats" class="count-row" style="display:none"></div>
             <div id="allocation-message" class="message-box"></div>
+            <div id="alloc-conflicts" class="message-box" style="display:none"></div>
 
             <div id="chart-legend" class="legend"></div>
             <div id="chart-container"><div class="empty">Select an exam and generate the chart.</div></div>
@@ -394,26 +413,59 @@
 
         <!-- ============ Import ============ -->
         <div id="import-section" class="card section-view">
-            <h3>Import Students from PDF / Excel</h3>
-            <div class="dropzone">
-                <input type="file" id="import-file" accept=".pdf,.xlsx,.xls,.csv,.txt">
-                <div class="hint" style="margin-top:.5rem">
-                    Supported: <b>.pdf</b>, <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> &mdash; expected columns:
-                    Roll No, Name, Course, Semester. <b>Missing cells are stored as null.</b>
+            <h3>Import Data (PDF / Excel / CSV)</h3>
+            <div class="toolbar no-print" style="margin-bottom:1rem">
+                <button class="btn" id="mode-students-btn" onclick="setImportMode('students')">Student List</button>
+                <button class="btn btn-amber" id="mode-exams-btn" onclick="setImportMode('exams')">Exam Data</button>
+            </div>
+
+            <div id="import-mode-students">
+                <div class="dropzone">
+                    <input type="file" id="import-file" accept=".pdf,.xlsx,.xls,.csv,.txt">
+                    <div class="hint" style="margin-top:.5rem">
+                        Supported: <b>.pdf</b>, <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> &mdash; expected columns:
+                        Roll No, Name, Branch, Batch/Course. <b>Missing cells are stored as null.</b>
+                        Unknown batches found in the file are registered automatically.
+                    </div>
+                    <div style="margin-top:.9rem">
+                        <button class="btn btn-success" onclick="uploadImport()">Upload &amp; Import</button>
+                        <button class="btn btn-ghost" onclick="downloadTemplate()">Download CSV template</button>
+                    </div>
                 </div>
-                <div style="margin-top:.9rem">
-                    <button class="btn btn-success" onclick="uploadImport()">Upload &amp; Import</button>
-                    <button class="btn btn-ghost" onclick="downloadTemplate()">Download CSV template</button>
+                <div id="import-result" style="display:none">
+                    <div class="count-row" id="import-counts"></div>
+                    <ul class="import-notes" id="import-notes"></ul>
+                    <h4>Preview</h4>
+                    <table>
+                        <thead><tr><th>Roll No</th><th>Name</th><th>Branch</th><th>Batch / Course</th><th>Missing cells</th></tr></thead>
+                        <tbody id="import-preview"></tbody>
+                    </table>
                 </div>
             </div>
-            <div id="import-result" style="display:none">
-                <div class="count-row" id="import-counts"></div>
-                <ul class="import-notes" id="import-notes"></ul>
-                <h4>Preview</h4>
-                <table>
-                    <thead><tr><th>Roll No</th><th>Name</th><th>Course</th><th>Semester</th><th>Missing cells</th></tr></thead>
-                    <tbody id="import-preview"></tbody>
-                </table>
+
+            <div id="import-mode-exams" style="display:none">
+                <div class="dropzone">
+                    <input type="file" id="exam-import-file" accept=".pdf,.xlsx,.xls,.csv,.txt">
+                    <div class="hint" style="margin-top:.5rem">
+                        Upload an exam schedule as <b>.pdf</b>, <b>.xlsx</b>, <b>.xls</b> or <b>.csv</b> &mdash; expected
+                        columns: Subject, Branch, Batch/Course, Date, Time (Application ID optional).
+                        Rows without a subject or a valid date are rejected and reported.
+                    </div>
+                    <div style="margin-top:.9rem">
+                        <button class="btn btn-amber" onclick="uploadExamImport()">Upload Exam Data</button>
+                        <button class="btn btn-ghost" onclick="downloadExamTemplate()">Download CSV template</button>
+                    </div>
+                </div>
+                <div id="exam-import-result" style="display:none">
+                    <div class="count-row" id="exam-import-counts"></div>
+                    <ul class="import-notes" id="exam-import-notes"></ul>
+                    <div id="exam-import-conflicts" class="message-box" style="display:none"></div>
+                    <h4>Preview</h4>
+                    <table>
+                        <thead><tr><th>Subject</th><th>Branch</th><th>Batch / Course</th><th>Date</th><th>Time</th><th>Application ID</th><th>Status</th></tr></thead>
+                        <tbody id="exam-import-preview"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -473,15 +525,15 @@
     }
     /* Same behaviour inside inline edit rows (delegated). */
     document.addEventListener('keydown', e => {
-        if (e.key !== 'Enter' || !e.target.matches('tr input')) return;
+        if (e.key !== 'Enter' || !e.target.matches('tr input, tr select')) return;
         const row = e.target.closest('tr[data-edit]');
         if (!row) return;
         e.preventDefault();
-        const inputs = [...row.querySelectorAll('input')];
+        const inputs = [...row.querySelectorAll('input, select')];
         const i = inputs.indexOf(e.target);
         if (i > -1 && i < inputs.length - 1) {
             inputs[i + 1].focus();
-            inputs[i + 1].select();
+            if (inputs[i + 1].select) inputs[i + 1].select();
         } else {
             const save = row.querySelector('[data-act="save"]');
             if (save) save.click();
@@ -493,6 +545,7 @@
         dashboard: loadDashboard,
         students: loadStudents,
         rooms: loadRooms,
+        courses: loadBatches,
         exams: loadExams,
         allocation: loadAllocationTab,
         import: () => {}
@@ -504,6 +557,74 @@
         try { loaders[name](); } catch (e) { /* noop */ }
     }
 
+    /* ================= courses / batches ================= */
+    let batches = [];
+
+    /** Branch + Batch grouping key shared with the backend (legend / colours / mixing). */
+    const groupKey = s => `${(s.branch || '').trim() || 'Unbranched'}·${(s.batch || '').trim() || 'Unbatched'}`;
+    const isAllTarget = v => { const t = (v || '').trim().toLowerCase(); return !t || t === 'all' || t === '*' || t === 'any'; };
+
+    async function loadBatches() {
+        try {
+            batches = await api('/api/batches');
+            renderBatches();
+            fillBatchSelects();
+        } catch (e) { toast(e.message, true); }
+    }
+    function renderBatches() {
+        const tbody = $('batch-list');
+        if (!tbody) return;
+        if (!batches.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="empty">No batches yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = batches.map(b => {
+            const studentsUsing = students.filter(s => (s.batch || '').toLowerCase() === (b.name || '').toLowerCase()).length;
+            return `<tr data-batch-id="${b.id}">
+                <td><b>${esc(b.name)}</b></td>
+                <td>${b.custom ? '<span class="badge" style="background:#14B8A6">Custom</span>' : '<span class="badge" style="background:#4F46E5">Default</span>'}</td>
+                <td>${studentsUsing}</td>
+                <td class="actions no-print">
+                    <button class="btn btn-sm btn-danger" data-act="delete-batch" data-id="${b.id}">Delete</button>
+                </td></tr>`;
+        }).join('');
+    }
+    async function addBatch() {
+        const name = $('c-name').value.trim();
+        if (!name) { toast('Enter a batch/course name (e.g. H).', true); $('c-name').focus(); return; }
+        try {
+            await api('/api/batches', jsonOpts('POST', { name }));
+            $('c-name').value = '';
+            $('c-name').focus();
+            toast(`Batch/Course "${name}" added - it is now available for students, exams and scheduling.`);
+            await loadBatches();
+        } catch (e) { toast(e.message, true); }
+    }
+    $('batch-list').addEventListener('click', async e => {
+        const btn = e.target.closest('button[data-act="delete-batch"]');
+        if (!btn) return;
+        const id = Number(btn.dataset.id);
+        try {
+            if (!confirm('Delete this batch/course?')) return;
+            await api('/api/batches/' + id, jsonOpts('DELETE'));
+            toast('Batch deleted.');
+            await loadBatches();
+        } catch (err) { toast(err.message, true); }
+    });
+    /** Rebuilds every batch dropdown (students, exams) from the current list. */
+    function fillBatchSelects() {
+        const names = batches.map(b => b.name);
+        fillSelect($('s-batch'), names, 'Select batch', false);
+        fillSelect($('e-course'), names, 'All', true);
+    }
+    function fillSelect(select, names, placeholder, withAll) {
+        if (!select) return;
+        const previous = select.value;
+        select.innerHTML = (withAll ? '<option value="">All</option>' : `<option value="">${esc(placeholder)}</option>`)
+            + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+        if (previous && names.includes(previous)) select.value = previous;
+    }
+
     /* ================= students ================= */
     let students = [];
     let editingStudentId = null;
@@ -512,13 +633,21 @@
         try {
             students = await api('/api/students');
             renderStudents();
+            renderBatches();   // keep the per-batch student counts fresh
         } catch (e) { toast(e.message, true); }
     }
     function renderStudents() {
         const q = ($('student-search').value || '').toLowerCase();
-        const list = students.filter(s => !q || [s.rollNo, s.name, s.course, s.currentSemester]
+        const list = students.filter(s => !q || [s.rollNo, s.name, s.branch, s.batch]
             .some(v => (v || '').toLowerCase().includes(q)));
         $('student-count').textContent = list.length + ' of ' + students.length + ' students';
+
+        // keep the branch datalist in sync with existing branches
+        const branchList = $('branch-list');
+        if (branchList) {
+            branchList.innerHTML = [...new Set(students.map(s => (s.branch || '').trim()).filter(Boolean))]
+                .map(b => `<option value="${esc(b)}">`).join('');
+        }
 
         const tbody = $('student-list');
         if (!list.length) {
@@ -530,8 +659,8 @@
                 return `<tr data-edit data-id="${s.id}">
                     <td><input data-f="rollNo" value="${esc(s.rollNo)}" placeholder="Roll No"></td>
                     <td><input data-f="name" value="${esc(s.name)}" placeholder="Name"></td>
-                    <td><input data-f="course" value="${esc(s.course)}" placeholder="Course"></td>
-                    <td><input data-f="currentSemester" value="${esc(s.currentSemester)}" placeholder="Semester"></td>
+                    <td><input data-f="branch" value="${esc(s.branch)}" placeholder="Branch"></td>
+                    <td>${batchSelectHtml('batch', s.batch)}</td>
                     <td class="actions no-print">
                         <button class="btn btn-sm btn-success" data-act="save" data-id="${s.id}">Save</button>
                         <button class="btn btn-sm btn-ghost" data-act="cancel" data-id="${s.id}">Cancel</button>
@@ -540,28 +669,38 @@
             return `<tr>
                 <td>${cellText(s.rollNo)}</td>
                 <td>${cellText(s.name)}</td>
-                <td>${cellText(s.course)}</td>
-                <td>${cellText(s.currentSemester)}</td>
+                <td>${cellText(s.branch)}</td>
+                <td>${cellText(s.batch)}</td>
                 <td class="actions no-print">
                     <button class="btn btn-sm btn-ghost" data-act="edit" data-id="${s.id}">Edit</button>
                     <button class="btn btn-sm btn-danger" data-act="delete" data-id="${s.id}">Delete</button>
                 </td></tr>`;
         }).join('');
     }
+    /** Select used in inline edit rows; unknown values are added as an extra option. */
+    function batchSelectHtml(field, value, emptyLabel = '-') {
+        const names = batches.map(b => b.name);
+        if (value && !names.includes(value)) names.push(value);
+        return `<select data-f="${field}"><option value="">${esc(emptyLabel)}</option>`
+            + names.map(n => `<option value="${esc(n)}"${n === value ? ' selected' : ''}>${esc(n)}</option>`).join('')
+            + '</select>';
+    }
     async function addStudent() {
         const payload = {
             rollNo: $('s-roll').value.trim() || null,
             name: $('s-name').value.trim() || null,
-            course: $('s-course').value.trim() || null,
-            currentSemester: $('s-sem').value.trim() || null
+            branch: $('s-branch').value.trim() || null,
+            batch: $('s-batch').value.trim() || null
         };
         if (!payload.rollNo && !payload.name) { toast('Enter at least a roll no or a name.', true); $('s-roll').focus(); return; }
         try {
             await api('/api/students', jsonOpts('POST', payload));
-            ['s-roll', 's-name', 's-course', 's-sem'].forEach(id => $(id).value = '');
+            ['s-roll', 's-name', 's-branch'].forEach(id => $(id).value = '');
+            $('s-batch').value = '';
             $('s-roll').focus();
             toast('Student added.');
             await loadStudents();
+            renderBatches();
         } catch (e) { toast(e.message, true); }
     }
     $('student-list').addEventListener('click', async e => {
@@ -574,7 +713,7 @@
             else if (btn.dataset.act === 'save') {
                 const row = btn.closest('tr[data-edit]');
                 const payload = {};
-                row.querySelectorAll('input').forEach(inp => payload[inp.dataset.f] = inp.value.trim() || null);
+                row.querySelectorAll('input, select').forEach(inp => payload[inp.dataset.f] = inp.value.trim() || null);
                 await api('/api/students/' + id, jsonOpts('PUT', payload));
                 editingStudentId = null;
                 toast('Student updated.');
@@ -763,24 +902,41 @@
 
     async function loadExams() {
         try {
-            exams = await api('/api/exams');
+            const [list, conflicts] = await Promise.all([api('/api/exams'), api('/api/exams/conflicts')]);
+            exams = list;
             renderExams();
+            renderExamConflicts(conflicts);
         } catch (e) { toast(e.message, true); }
+    }
+    /** Red the conflicts panel: same date + time + audience exam pairs. */
+    function renderExamConflicts(list) {
+        const box = $('exam-conflicts');
+        if (!box) return;
+        if (!list || !list.length) {
+            box.style.display = 'none';
+            box.textContent = '';
+            return;
+        }
+        box.style.display = 'block';
+        box.className = 'message-box err';
+        box.innerHTML = `<b>${list.length} scheduling conflict(s) detected:</b>`
+            + '<ul style="margin:.4rem 0 0; padding-left:1.2rem">'
+            + list.map(c => `<li>${esc(c.message)}</li>`).join('') + '</ul>';
     }
     function fmtDate(d) { return d || '-'; }
     function fmtTime(t) { return t ? String(t).slice(0, 5) : '-'; }
     function renderExams() {
         const tbody = $('exam-list');
         if (!exams.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty">No exams yet. Create one above (e.g. semester S3 exam).</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">No exams yet. Create one above or upload exam data (PDF/Excel) in the Import Data tab.</td></tr>';
             return;
         }
         tbody.innerHTML = exams.map(x => {
             if (editingExamId === x.id) {
                 return `<tr data-edit data-id="${x.id}">
                     <td><input data-f="subjectName" value="${esc(x.subjectName)}" placeholder="Exam / Subject"></td>
-                    <td><input data-f="course" value="${esc(x.course)}" placeholder="Course"></td>
-                    <td><input data-f="semester" value="${esc(x.semester)}" placeholder="S3"></td>
+                    <td><input data-f="branch" value="${esc(x.branch)}" placeholder="Branch"></td>
+                    <td>${batchSelectHtml('course', x.course, 'All')}</td>
                     <td><input data-f="examDate" type="date" value="${esc(x.examDate)}"></td>
                     <td><input data-f="examTime" type="time" value="${x.examTime ? String(x.examTime).slice(0, 5) : ''}"></td>
                     <td><input data-f="applicationId" value="${esc(x.applicationId)}" placeholder="App ID"></td>
@@ -789,11 +945,12 @@
                         <button class="btn btn-sm btn-ghost" data-act="cancel" data-id="${x.id}">Cancel</button>
                     </td></tr>`;
             }
-            const sem = x.semester ? `<span class="badge" style="background:#4F46E5">${esc(x.semester)}</span>` : '<span class="muted">All</span>';
+            const branch = x.branch ? esc(x.branch) : '<span class="muted">All</span>';
+            const batch = x.course ? `<span class="badge" style="background:#4F46E5">${esc(x.course)}</span>` : '<span class="muted">All</span>';
             return `<tr>
                 <td><b>${esc(x.subjectName)}</b></td>
-                <td>${esc(x.course) || '<span class="muted">All</span>'}</td>
-                <td>${sem}</td>
+                <td>${branch}</td>
+                <td>${batch}</td>
                 <td>${fmtDate(x.examDate)}</td>
                 <td>${fmtTime(x.examTime)}</td>
                 <td>${cellText(x.applicationId)}</td>
@@ -804,15 +961,15 @@
         }).join('');
     }
     function suggestAppId() {
-        const sem = ($('e-sem').value || 'EX').toUpperCase();
+        const tag = (($('e-course').value || $('e-branch').value || 'EX').replace(/[^A-Za-z0-9]/g, '') || 'EX').toUpperCase();
         const date = ($('e-date').value || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
-        $('e-appid').value = `APP-${sem}-${date}-${String(exams.length + 1).padStart(3, '0')}`;
+        $('e-appid').value = `APP-${tag}-${date}-${String(exams.length + 1).padStart(3, '0')}`;
     }
     async function addExam() {
         const payload = {
             subjectName: $('e-subject').value.trim() || null,
+            branch: $('e-branch').value.trim() || null,
             course: $('e-course').value.trim() || null,
-            semester: $('e-sem').value.trim() || null,
             examDate: $('e-date').value || null,
             examTime: $('e-time').value || null,
             applicationId: $('e-appid').value.trim() || null
@@ -820,13 +977,12 @@
         if (!payload.subjectName) { toast('Enter the exam / subject name.', true); $('e-subject').focus(); return; }
         if (!payload.examDate) { toast('Pick the exam date.', true); $('e-date').focus(); return; }
         if (!payload.applicationId) {
-            const sem = (payload.semester || 'EX').toUpperCase();
-            const date = payload.examDate.replace(/-/g, '');
-            payload.applicationId = `APP-${sem}-${date}-${String(exams.length + 1).padStart(3, '0')}`;
+            const tag = ((payload.course || payload.branch || 'EX').replace(/[^A-Za-z0-9]/g, '') || 'EX').toUpperCase();
+            payload.applicationId = `APP-${tag}-${payload.examDate.replace(/-/g, '')}-${String(exams.length + 1).padStart(3, '0')}`;
         }
         try {
             await api('/api/exams', jsonOpts('POST', payload));
-            ['e-subject', 'e-course', 'e-date', 'e-time', 'e-appid'].forEach(id => $(id).value = '');
+            ['e-subject', 'e-branch', 'e-date', 'e-time', 'e-appid'].forEach(id => $(id).value = '');
             $('e-subject').focus();
             toast('Exam created: ' + payload.applicationId);
             await loadExams();
@@ -842,7 +998,7 @@
             else if (btn.dataset.act === 'save') {
                 const row = btn.closest('tr[data-edit]');
                 const payload = {};
-                row.querySelectorAll('input').forEach(inp => payload[inp.dataset.f] = inp.value.trim() || null);
+                row.querySelectorAll('input, select').forEach(inp => payload[inp.dataset.f] = inp.value.trim() || null);
                 await api('/api/exams/' + id, jsonOpts('PUT', payload));
                 editingExamId = null;
                 toast('Exam updated.');
@@ -874,7 +1030,7 @@
             const select = $('alloc-exam');
             const previous = selectedExamId;
             select.innerHTML = exams.length
-                ? exams.map(x => `<option value="${x.id}">${esc(x.subjectName)}${x.semester ? ' — ' + esc(x.semester) : ''}${x.examDate ? ' — ' + x.examDate : ''}</option>`).join('')
+                ? exams.map(x => `<option value="${x.id}">${esc(x.subjectName)}${x.course ? ' — ' + esc(x.course) : (x.branch ? ' — ' + esc(x.branch) : '')}${x.examDate ? ' — ' + x.examDate : ''}</option>`).join('')
                 : '<option value="">No exams yet — create one in the Exams tab</option>';
             if (exams.length) {
                 const stillThere = previous && exams.some(x => x.id === previous);
@@ -891,6 +1047,7 @@
     function onExamSelected() {
         selectedExamId = Number($('alloc-exam').value) || null;
         $('allocation-message').className = 'message-box';
+        $('alloc-conflicts').style.display = 'none';
         loadSeatsForSelected();
     }
     function currentExam() {
@@ -912,23 +1069,28 @@
         try {
             const res = await api('/api/allocate', jsonOpts('POST', { examId: selectedExamId }));
             setMessage('allocation-message', res.message, !res.success);
+            const cbox = $('alloc-conflicts');
+            if (res.conflicts && res.conflicts.length) {
+                cbox.style.display = 'block';
+                cbox.className = 'message-box err';
+                cbox.innerHTML = '<b>Scheduling conflicts detected:</b>'
+                    + '<ul style="margin:.4rem 0 0; padding-left:1.2rem">'
+                    + res.conflicts.map(c => `<li>${esc(c)}</li>`).join('') + '</ul>';
+            } else {
+                cbox.style.display = 'none';
+            }
             await loadSeatsForSelected();
         } catch (e) { setMessage('allocation-message', e.message, true); }
     }
 
     function matchesExam(s, exam) {
         if (!exam) return true;
+        const b = (exam.branch || '').trim().toLowerCase();
+        if (!isAllTarget(b) && b !== (s.branch || '').trim().toLowerCase()) return false;
         const c = (exam.course || '').trim().toLowerCase();
-        if (c && c !== 'all' && c !== '*' && c !== 'all courses') {
-            if (c !== (s.course || '').trim().toLowerCase()) return false;
-        }
-        const es = (exam.semester || '').trim().toLowerCase();
-        if (es && es !== 'all' && es !== '*') {
-            const want = es.replace(/\D/g, '');
-            const have = (s.currentSemester || '').replace(/\D/g, '');
-            if (want && have) { if (want !== have) return false; }
-            else if (es !== (s.currentSemester || '').trim().toLowerCase()) return false;
-        }
+        if (!isAllTarget(c)
+                && c !== (s.batch || '').trim().toLowerCase()
+                && c !== (s.branch || '').trim().toLowerCase()) return false;
         return true;
     }
 
@@ -955,7 +1117,7 @@
         seats.forEach(s => {
             if (!s.allocatedStudent) return;
             allocated++;
-            const c = s.allocatedStudent.course || 'Unspecified';
+            const c = groupKey(s.allocatedStudent);
             counts[c] = (counts[c] || 0) + 1;
         });
 
@@ -988,11 +1150,11 @@
                     if (cellSeats.length <= 1) {
                         const stu = cellSeats[0] && cellSeats[0].allocatedStudent;
                         if (stu) {
-                            const color = courseColor(stu.course);
+                            const color = courseColor(groupKey(stu));
                             html += `<div class="seat" style="border-top:3px solid ${color}">
                                 <b>${esc(stu.rollNo) || '?'}</b>
                                 <span title="${esc(stu.name)}">${esc(stu.name) || '-'}</span>
-                                <em style="background:${color}">${esc(stu.course) || '-'}</em>
+                                <em style="background:${color}" title="${esc(stu.branch || '')} · ${esc(stu.batch || '')}">${esc(groupKey(stu))}</em>
                             </div>`;
                         } else {
                             html += '<div class="seat vacant">Vacant</div>';
@@ -1002,8 +1164,8 @@
                         cellSeats.forEach(seat => {
                             const stu = seat.allocatedStudent;
                             if (stu) {
-                                const color = courseColor(stu.course);
-                                html += `<div class="slot" style="border-left:3px solid ${color}" title="${esc(stu.rollNo) || '?'} · ${esc(stu.name) || '-'} · ${esc(stu.course) || 'No course'}"><b>${esc(stu.rollNo) || '?'}</b><span>${esc(stu.name) || '-'}</span><i>${esc(stu.course) || '-'}</i></div>`;
+                                const color = courseColor(groupKey(stu));
+                                html += `<div class="slot" style="border-left:3px solid ${color}" title="${esc(stu.rollNo) || '?'} · ${esc(stu.name) || '-'} · ${esc(stu.branch || 'No branch')} · ${esc(stu.batch || 'No batch')}"><b>${esc(stu.rollNo) || '?'}</b><span>${esc(stu.name) || '-'}</span><i>${esc(groupKey(stu))}</i></div>`;
                             } else {
                                 html += '<div class="slot empty">Vacant</div>';
                             }
@@ -1101,11 +1263,11 @@
         }
         tbody.innerHTML = res.preview.map(p => `<tr>
             <td>${cellText(p.rollNo)}</td><td>${cellText(p.name)}</td>
-            <td>${cellText(p.course)}</td><td>${cellText(p.currentSemester)}</td>
+            <td>${cellText(p.branch)}</td><td>${cellText(p.batch)}</td>
             <td>${cellText(p.missing)}</td></tr>`).join('');
     }
     function downloadTemplate() {
-        const csv = 'roll no,name,course,semester\n101,Ananya Sharma,CSE,S3\n102,Rahul Verma,ECE,\n103,,CSE,S3\n';
+        const csv = 'roll no,name,branch,batch\n1,Akshay,CEC,E\n2,Priya Sharma,CEC,A\n3,,MEC,B\n';
         const blob = new Blob([csv], { type: 'text/csv' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -1115,14 +1277,82 @@
         a.remove();
     }
 
+    /* ---- import mode switch (students / exam data) ---- */
+    function setImportMode(mode) {
+        const isStudents = mode !== 'exams';
+        $('import-mode-students').style.display = isStudents ? 'block' : 'none';
+        $('import-mode-exams').style.display = isStudents ? 'none' : 'block';
+        $('mode-students-btn').className = 'btn' + (isStudents ? ' btn-success' : ' btn-ghost');
+        $('mode-exams-btn').className = 'btn' + (isStudents ? ' btn-ghost' : ' btn-amber');
+    }
+
+    /* ---- exam data upload (PDF / Excel / CSV) ---- */
+    async function uploadExamImport() {
+        const input = $('exam-import-file');
+        if (!input.files.length) { toast('Choose a PDF or Excel file with exam data first.', true); return; }
+        const fd = new FormData();
+        fd.append('file', input.files[0]);
+        try {
+            const res = await api('/api/import/exams', { method: 'POST', body: fd });
+            renderExamImportResult(res);
+            toast(`Exam data imported: ${res.imported} new, ${res.updated} updated, ${res.invalid} invalid.`);
+            input.value = '';
+            await loadExams();
+        } catch (e) { toast(e.message, true); }
+    }
+    function renderExamImportResult(res) {
+        $('exam-import-result').style.display = 'block';
+        $('exam-import-counts').innerHTML = `
+            <div class="count"><b>${res.imported}</b> new exams</div>
+            <div class="count"><b>${res.updated}</b> updated</div>
+            <div class="count"><b>${res.invalid}</b> invalid rows</div>
+            <div class="count"><b>${res.skipped}</b> blank rows</div>`;
+        $('exam-import-notes').innerHTML = (res.notes || []).map(n => `<li>${esc(n)}</li>`).join('');
+        const cbox = $('exam-import-conflicts');
+        if (res.conflicts && res.conflicts.length) {
+            cbox.style.display = 'block';
+            cbox.className = 'message-box err';
+            cbox.innerHTML = `<b>${res.conflicts.length} scheduling conflict(s):</b>`
+                + '<ul style="margin:.4rem 0 0; padding-left:1.2rem">'
+                + res.conflicts.map(c => `<li>${esc(c)}</li>`).join('') + '</ul>';
+        } else {
+            cbox.style.display = 'none';
+        }
+        const tbody = $('exam-import-preview');
+        if (!res.preview || !res.preview.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">No valid exam rows found.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = res.preview.map(p => `<tr>
+            <td>${cellText(p.subjectName)}</td><td>${cellText(p.branch)}</td><td>${cellText(p.course)}</td>
+            <td>${cellText(p.examDate)}</td><td>${cellText(p.examTime)}</td><td>${cellText(p.applicationId)}</td>
+            <td>${p.status === 'NEW'
+                ? '<span class="badge" style="background:#10B981">NEW</span>'
+                : '<span class="badge" style="background:#F59E0B">UPDATED</span>'}</td></tr>`).join('');
+    }
+    function downloadExamTemplate() {
+        const csv = 'subject,branch,batch,date,time\n'
+            + 'Mathematics,CEC,A,02/11/2026,10:00\n'
+            + 'Physics,CEC,B,03/11/2026,10:00\n'
+            + 'Chemistry,MEC,A,04/11/2026,14:00\n';
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'exam-import-template.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
     /* ================= dashboard ================= */
     async function loadDashboard() {
         try {
-            const [s, r, e, allSeats] = await Promise.all([
-                api('/api/students'), api('/api/rooms'), api('/api/exams'), api('/api/seats')
+            const [s, r, e, allSeats, b] = await Promise.all([
+                api('/api/students'), api('/api/rooms'), api('/api/exams'), api('/api/seats'), api('/api/batches')
             ]);
             $('stat-students').textContent = s.length;
             $('stat-rooms').textContent = r.length;
+            $('stat-batches').textContent = b.length;
             $('stat-exams').textContent = e.length;
             $('stat-seats').textContent = allSeats.filter(x => x.allocatedStudent).length;
         } catch (err) { toast(err.message, true); }
@@ -1131,8 +1361,11 @@
     /* ================= init ================= */
     wireEnterNav($('student-form'), addStudent);
     wireEnterNav($('room-form'), addRoom);
+    wireEnterNav($('batch-form'), addBatch);
     wireEnterNav($('exam-form'), addExam);
 
+    setImportMode('students');
+    loadBatches();
     loadDashboard();
     </script>
 </body>

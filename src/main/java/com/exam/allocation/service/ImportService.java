@@ -2,22 +2,11 @@ package com.exam.allocation.service;
 
 import com.exam.allocation.model.Student;
 import com.exam.allocation.repository.StudentRepository;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.DataFormatter;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -27,15 +16,29 @@ import java.util.Map;
 /**
  * Imports student lists uploaded as Excel (.xls/.xlsx), PDF or CSV/TXT files.
  *
- * Header row is detected by known column names ("roll no", "name", "course", "semester",
- * ...); when it cannot be detected the default order rollNo/name/course/semester is used.
- * Any cell that is missing in the file is stored as null.
+ * <p>The stored student fields are exactly the four required by the
+ * specification: <b>Roll Number, Name, Branch, Batch/Course</b> (no Division).
+ *
+ * <p>Header row is detected by known column names ("roll no", "name", "branch",
+ * "batch", "course", ...); when it cannot be detected the default order
+ * rollNo/name/branch/batch is used. A column headed <i>course</i> is treated as
+ * ambiguous: single-letter or already known values (A..G, custom batches) go to
+ * <i>batch</i>, everything else (CSE, CEC, ...) goes to <i>branch</i>. Batch
+ * values found in the file are registered automatically so they become
+ * available to the timetable system. Any cell that is missing in the file is
+ * stored as null.
  */
 @Service
 public class ImportService {
 
     @Autowired
     private StudentRepository studentRepository;
+
+    @Autowired
+    private FileTableReader fileTableReader;
+
+    @Autowired
+    private BatchService batchService;
 
     public static class ImportResult {
         private String fileName;
@@ -64,32 +67,12 @@ public class ImportService {
 
     private static final String F_ROLL = "rollNo";
     private static final String F_NAME = "name";
-    private static final String F_COURSE = "course";
-    private static final String F_SEM = "currentSemester";
+    private static final String F_BRANCH = "branch";
+    private static final String F_BATCH = "batch";
 
     public ImportResult importStudents(MultipartFile file) throws IOException {
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("No file uploaded. Choose a .pdf, .xlsx, .xls or .csv file.");
-        }
-        String rawName = file.getOriginalFilename();
-        String original = rawName == null ? "" : rawName;
-        String lower = original.toLowerCase();
-
-        List<String[]> rows;
-        boolean positionalTokens; // PDF rows may need token re-balancing (names contain spaces)
-        if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
-            rows = readExcel(file);
-            positionalTokens = false;
-        } else if (lower.endsWith(".pdf")) {
-            rows = readPdf(file);
-            positionalTokens = true;
-        } else if (lower.endsWith(".csv") || lower.endsWith(".txt") || lower.endsWith(".tsv")) {
-            rows = readDelimited(file);
-            positionalTokens = false;
-        } else {
-            throw new IllegalArgumentException(
-                    "Unsupported file type \"" + original + "\". Supported formats: .pdf, .xlsx, .xls, .csv, .txt");
-        }
+        List<String[]> rows = fileTableReader.read(file);
+        String original = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
 
         ImportResult result = new ImportResult();
         result.setFileName(original);
@@ -105,15 +88,20 @@ public class ImportService {
                 mapping = candidate;
                 break;
             }
+            // PDF blob rows: only accept a tokenised header when its labels are
+            // single-token per column ("Roll No" would shift every index), which
+            // is the case for Excel/CSV anyway - PDFs fall back to the default order.
         }
+        boolean ambiguousCourseHeader = false;
         if (headerRow < 0) {
             // No recognised header: assume the default column order.
             mapping.put(F_ROLL, 0);
             mapping.put(F_NAME, 1);
-            mapping.put(F_COURSE, 2);
-            mapping.put(F_SEM, 3);
-            result.getNotes().add("No header row recognised - assumed column order: Roll No, Name, Course, Semester.");
+            mapping.put(F_BRANCH, 2);
+            mapping.put(F_BATCH, 3);
+            result.getNotes().add("No header row recognised - assumed column order: Roll No, Name, Branch, Batch/Course.");
         } else {
+            ambiguousCourseHeader = headerCellIs(toAtoms(rows.get(headerRow)), mapping.get(F_BATCH), "course");
             result.getNotes().add("Header found in row " + (headerRow + 1) + " with "
                     + mapping.size() + " recognised column(s).");
         }
@@ -124,6 +112,7 @@ public class ImportService {
         // ---- Read each row into fields ---------------------------------------
         int startRow = headerRow >= 0 ? headerRow + 1 : 0;
         int processed = 0;
+        int rerouted = 0;
         for (int i = startRow; i < rows.size(); i++) {
             String[] cells = rows.get(i);
             if (isBlankRow(cells)) { result.setSkipped(result.getSkipped() + 1); continue; }
@@ -133,38 +122,55 @@ public class ImportService {
                 continue;
             }
 
+            boolean positionalTokens = original.toLowerCase().endsWith(".pdf");
             Map<String, String> fields = positionalTokens
                     ? extractByTokens(cells, mapping, expected, nameIdx)
                     : extractPositional(cells, mapping);
 
+            if (ambiguousCourseHeader) {
+                if (routeCourseValue(fields)) rerouted++;
+            }
+
             String roll = blankToNull(fields.get(F_ROLL));
             String name = blankToNull(fields.get(F_NAME));
-            String course = blankToNull(fields.get(F_COURSE));
-            String sem = blankToNull(fields.get(F_SEM));
+            String branch = blankToNull(fields.get(F_BRANCH));
+            String batch = normaliseBatch(fields.get(F_BATCH));
 
-            if (roll == null && name == null && course == null && sem == null) {
+            // PDF tables drop empty cells, so values shift left: a row such as
+            // "402 Asha A" (missing branch) puts the batch value into the branch
+            // column - move it back when it is clearly batch-like.
+            if (positionalTokens && batch == null && branch != null && looksLikeBatch(branch)) {
+                batch = branch;
+                branch = null;
+                rerouted++;
+            }
+
+            if (roll == null && name == null && branch == null && batch == null) {
                 result.setSkipped(result.getSkipped() + 1);
                 continue;
             }
 
-            int missing = countMissing(roll, name, course, sem);
+            int missing = countMissing(roll, name, branch, batch);
             result.setMissingCells(result.getMissingCells() + missing);
+
+            // Make batches found in the file available to the timetable system.
+            if (batch != null) batchService.ensureExists(batch);
 
             Student student;
             if (roll != null) {
                 Student existing = studentRepository.findByRollNo(roll);
                 if (existing != null) {
                     existing.setName(name);
-                    existing.setCourse(course);
-                    existing.setCurrentSemester(sem);
+                    existing.setBranch(branch);
+                    existing.setBatch(batch);
                     student = studentRepository.save(existing);
                     result.setUpdated(result.getUpdated() + 1);
                 } else {
-                    student = studentRepository.save(newStudent(roll, name, course, sem));
+                    student = studentRepository.save(newStudent(roll, name, branch, batch));
                     result.setImported(result.getImported() + 1);
                 }
             } else {
-                student = studentRepository.save(newStudent(null, name, course, sem));
+                student = studentRepository.save(newStudent(null, name, branch, batch));
                 result.setImported(result.getImported() + 1);
             }
 
@@ -172,8 +178,8 @@ public class ImportService {
                 Map<String, String> line = new LinkedHashMap<>();
                 line.put("rollNo", student.getRollNo());
                 line.put("name", student.getName());
-                line.put("course", student.getCourse());
-                line.put("currentSemester", student.getCurrentSemester());
+                line.put("branch", student.getBranch());
+                line.put("batch", student.getBatch());
                 line.put("missing", String.valueOf(missing));
                 result.getPreview().add(line);
             }
@@ -183,67 +189,13 @@ public class ImportService {
         if (processed == 0) {
             result.getNotes().add("No data rows found in the file.");
         }
+        if (rerouted > 0) {
+            result.getNotes().add(rerouted + " cell(s) were re-aligned to the correct Branch/Batch column.");
+        }
         if (result.getMissingCells() > 0) {
             result.getNotes().add(result.getMissingCells() + " missing cell(s) were stored as null.");
         }
         return result;
-    }
-
-    // ---------------------------------------------------------------------
-    // Readers
-    // ---------------------------------------------------------------------
-
-    private List<String[]> readExcel(MultipartFile file) throws IOException {
-        List<String[]> rows = new ArrayList<>();
-        try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
-            Sheet sheet = workbook.getSheetAt(0);
-            DataFormatter formatter = new DataFormatter();
-            for (Row row : sheet) {
-                short last = row.getLastCellNum();
-                int width = Math.max(0, Math.min(last, 40));
-                String[] cells = new String[width];
-                for (int c = 0; c < width; c++) {
-                    Cell cell = row.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
-                    String value = cell == null ? null : formatter.formatCellValue(cell).trim();
-                    cells[c] = (value == null || value.isEmpty()) ? null : value;
-                }
-                rows.add(cells);
-            }
-        }
-        return rows;
-    }
-
-    private List<String[]> readPdf(MultipartFile file) throws IOException {
-        List<String[]> rows = new ArrayList<>();
-        try (PDDocument document = PDDocument.load(file.getInputStream())) {
-            PDFTextStripper stripper = new PDFTextStripper();
-            stripper.setSortByPosition(true);
-            String text = stripper.getText(document);
-            for (String line : text.split("\\r\\n|\\n|\\r")) {
-                if (line.trim().isEmpty()) {
-                    rows.add(new String[0]);
-                    continue;
-                }
-                rows.add(splitLoose(line));
-            }
-        }
-        return rows;
-    }
-
-    private List<String[]> readDelimited(MultipartFile file) throws IOException {
-        List<String[]> rows = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-            String firstLine = reader.readLine();
-            if (firstLine == null) return rows;
-            char delimiter = detectDelimiter(firstLine);
-            rows.add(splitDelimited(firstLine, delimiter));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                rows.add(splitDelimited(line, delimiter));
-            }
-        }
-        return rows;
     }
 
     // ---------------------------------------------------------------------
@@ -253,7 +205,7 @@ public class ImportService {
     /** Strict positional mapping used for Excel/CSV (cells are already atomic). */
     private Map<String, String> extractPositional(String[] cells, Map<String, Integer> mapping) {
         Map<String, String> fields = new LinkedHashMap<>();
-        for (String field : new String[]{F_ROLL, F_NAME, F_COURSE, F_SEM}) {
+        for (String field : new String[]{F_ROLL, F_NAME, F_BRANCH, F_BATCH}) {
             Integer idx = mapping.get(field);
             fields.put(field, (idx == null || idx >= cells.length) ? null : cells[idx]);
         }
@@ -292,29 +244,53 @@ public class ImportService {
         }
 
         Map<String, String> fields = new LinkedHashMap<>();
-        for (String field : new String[]{F_ROLL, F_NAME, F_COURSE, F_SEM}) {
+        for (String field : new String[]{F_ROLL, F_NAME, F_BRANCH, F_BATCH}) {
             Integer idx = mapping.get(field);
             fields.put(field, (idx == null || idx >= columns.size()) ? null : columns.get(idx));
         }
-        repairShiftedSemester(fields, mapping);
         return fields;
     }
 
     /**
-     * PDF text extraction collapses empty table cells, so values shift left:
-     * "402 Asha S7" (empty course) would otherwise put "S7" into the course
-     * column. When the semester column is empty but the course column holds a
-     * semester-like value (S7, sem 3, 4th, ...), move it back to semester.
+     * A column headed "course" is ambiguous: values like "CSE"/"CEC" are
+     * branches, values like "A".."G" (or an already registered batch) are
+     * batches. Moves a non-batch value from batch to branch when branch is
+     * still empty.
+     *
+     * @return true when a value was rerouted
      */
-    private void repairShiftedSemester(Map<String, String> fields, Map<String, Integer> mapping) {
-        if (!mapping.containsKey(F_SEM)) return;
-        String sem = fields.get(F_SEM);
-        String course = fields.get(F_COURSE);
-        if ((sem == null || sem.isBlank()) && course != null
-                && course.matches("(?i)(sem[\\s-]*\\d{1,2}|s\\d{1,2}|\\d{1,2}(st|nd|rd|th)?)")) {
-            fields.put(F_SEM, course);
-            fields.put(F_COURSE, null);
+    private boolean routeCourseValue(Map<String, String> fields) {
+        String batch = blankToNull(fields.get(F_BATCH));
+        if (batch == null) return false;
+        if (looksLikeBatch(batch)) return false;
+        if (blankToNull(fields.get(F_BRANCH)) == null) {
+            fields.put(F_BRANCH, batch);
+            fields.put(F_BATCH, null);
+            return true;
         }
+        fields.put(F_BATCH, null);
+        return true;
+    }
+
+    /** Batch-like = an already registered batch or a single letter (A..Z, custom H, ...). */
+    private boolean looksLikeBatch(String value) {
+        if (value == null) return true;
+        String trimmed = value.trim();
+        if (batchService.isKnown(trimmed)) return true;
+        return trimmed.length() == 1 && Character.isLetter(trimmed.charAt(0));
+    }
+
+    /**
+     * Cleans a batch value: blank and semester-like values (legacy files with a
+     * "semester" column) become null, everything else is registered as a batch.
+     */
+    private String normaliseBatch(String value) {
+        String trimmed = blankToNull(value);
+        if (trimmed == null) return null;
+        if (trimmed.matches("(?i)(sem[\\s-]*\\d{1,2}|s\\d{1,2}|\\d{1,2}(st|nd|rd|th)?)")) {
+            return null;   // semester values are not part of the student model
+        }
+        return trimmed;
     }
 
     // ---------------------------------------------------------------------
@@ -345,6 +321,28 @@ public class ImportService {
         return mapHeader(tokens.toArray(new String[0])).size() >= 3;
     }
 
+    /** True when the header cell for a field literally says "course" (ambiguous). */
+    private boolean headerCellIs(String[] headerCells, Integer index, String expected) {
+        if (headerCells == null || index == null || index >= headerCells.length) return false;
+        String raw = headerCells[index];
+        if (raw == null) return false;
+        return raw.trim().toLowerCase().replaceAll("[.:]", "").replaceAll("\\s+", " ").equals(expected);
+    }
+
+    /**
+     * A PDF row may arrive as one blob of single-space separated columns
+     * (PDFBox collapses the wide table gaps). Split such a row into atoms so
+     * the column mapping and content scanning work on individual values.
+     */
+    private String[] toAtoms(String[] cells) {
+        if (cells == null) return new String[0];
+        if (cells.length == 1 && cells[0] != null && cells[0].trim().contains(" ")) {
+            String[] tokens = cells[0].trim().split("\\s+");
+            if (tokens.length > 1) return tokens;
+        }
+        return cells;
+    }
+
     private String aliasFor(String raw) {
         if (raw == null) return null;
         String header = raw.trim().toLowerCase().replaceAll("[.:]", "").replaceAll("\\s+", " ");
@@ -355,11 +353,12 @@ public class ImportService {
                 return F_ROLL;
             case "name": case "student name": case "full name": case "student":
                 return F_NAME;
-            case "course": case "branch": case "class": case "program": case "programme":
-            case "stream": case "dept": case "department":
-                return F_COURSE;
-            case "semester": case "sem": case "current semester": case "term":
-                return F_SEM;
+            case "branch": case "dept": case "department": case "stream":
+            case "program": case "programme":
+                return F_BRANCH;
+            case "batch": case "batch/course": case "batch / course": case "class":
+            case "section": case "group": case "course":
+                return F_BATCH;
             default:
                 return null;
         }
@@ -368,48 +367,6 @@ public class ImportService {
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
-
-    /** Splits a PDF line into table cells on 2+ spaces, tabs or pipes. */
-    private String[] splitLoose(String line) {
-        String trimmed = line.trim();
-        String[] parts = trimmed.split("\\s{2,}|\\t|\\|");
-        List<String> cells = new ArrayList<>();
-        for (String part : parts) {
-            String value = part.trim();
-            if (!value.isEmpty()) cells.add(value);
-        }
-        return cells.toArray(new String[0]);
-    }
-
-    private char detectDelimiter(String line) {
-        if (line.contains("\t")) return '\t';
-        if (line.contains(";")) return ';';
-        return ',';
-    }
-
-    private String[] splitDelimited(String line, char delimiter) {
-        List<String> cells = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        boolean inQuotes = false;
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (inQuotes) {
-                if (c == '"') {
-                    if (i + 1 < line.length() && line.charAt(i + 1) == '"') { current.append('"'); i++; }
-                    else inQuotes = false;
-                } else current.append(c);
-            } else if (c == '"') {
-                inQuotes = true;
-            } else if (c == delimiter) {
-                cells.add(current.toString());
-                current.setLength(0);
-            } else {
-                current.append(c);
-            }
-        }
-        cells.add(current.toString());
-        return cells.toArray(new String[0]);
-    }
 
     private boolean isBlankRow(String[] cells) {
         if (cells == null || cells.length == 0) return true;
@@ -431,12 +388,12 @@ public class ImportService {
         return missing;
     }
 
-    private Student newStudent(String roll, String name, String course, String sem) {
+    private Student newStudent(String roll, String name, String branch, String batch) {
         Student student = new Student();
         student.setRollNo(roll);
         student.setName(name);
-        student.setCourse(course);
-        student.setCurrentSemester(sem);
+        student.setBranch(branch);
+        student.setBatch(batch);
         return student;
     }
 }

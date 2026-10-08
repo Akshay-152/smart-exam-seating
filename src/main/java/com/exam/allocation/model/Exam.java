@@ -4,6 +4,16 @@ import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
+/**
+ * An exam event that students can be seated for.
+ *
+ * <p>Audience targeting (both optional - blank means "all students"):
+ * <ul>
+ *   <li>{@code branch}  - only students of this branch, e.g. "CEC"</li>
+ *   <li>{@code course}  - the batch/course the exam is for, e.g. "E"
+ *       (also matches a branch of the same name for imported/legacy data)</li>
+ * </ul>
+ */
 @Entity
 public class Exam {
 
@@ -13,16 +23,17 @@ public class Exam {
 
     private String subjectName;
 
-    private String course;
+    /** Branch this exam is for; null/blank = all branches. */
+    private String branch;
 
-    /** Semester this exam belongs to, e.g. "S3" for semester 3. */
-    private String semester;
+    /** Batch/Course this exam is for, e.g. "E"; null/blank = all batches. */
+    private String course;
 
     private LocalDate examDate;
 
     private LocalTime examTime;
 
-    /** Application identifier of the exam, e.g. "APP-S3-2026-001". */
+    /** Application identifier of the exam, e.g. "APP-E-2026-001". */
     private String applicationId;
 
     public Exam() {}
@@ -34,11 +45,11 @@ public class Exam {
     public String getSubjectName() { return subjectName; }
     public void setSubjectName(String subjectName) { this.subjectName = subjectName; }
 
+    public String getBranch() { return branch; }
+    public void setBranch(String branch) { this.branch = branch; }
+
     public String getCourse() { return course; }
     public void setCourse(String course) { this.course = course; }
-
-    public String getSemester() { return semester; }
-    public void setSemester(String semester) { this.semester = semester; }
 
     public LocalDate getExamDate() { return examDate; }
     public void setExamDate(LocalDate examDate) { this.examDate = examDate; }

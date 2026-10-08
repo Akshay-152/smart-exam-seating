@@ -31,13 +31,16 @@ spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
 
 ## How Entities Map to Tables
 The system uses the `@Entity` annotation on Java classes to automatically generate database tables.
-* `Student`: Maps to the `student` table.
+* `Student`: Maps to the `student` table (`roll_no`, `name`, `branch`, `batch` - exactly the four required student fields; there is no Division column).
+* `Batch`: Maps to the `batch` table (`name` unique, `custom` flag) - holds the default batches A-G plus any custom "Add Course" entries.
 * `Room`: Maps to the `room` table.
-* `Seat`: Maps to the `seat` table (contains Foreign Keys to `Room` and `Student`).
-* `Exam`: Maps to the `exam` table.
-* `Admin`: Maps to the `admin` table.
+* `Seat`: Maps to the `seat` table (contains Foreign Keys to `Room`, `Student` and `Exam`).
+* `Exam`: Maps to the `exam` table (`subject_name`, `branch`, `course` (batch/course target), `exam_date`, `exam_time`, `application_id`).
+* `Admin`: Maps to the `admin` table (Planned - authentication is not implemented yet).
 
 Because we set `spring.jpa.hibernate.ddl-auto=update` in the properties, Hibernate will automatically create or update the table schemas every time the application starts based on these Entity classes.
 
 ## Repositories
-Data access is handled by interfaces extending `JpaRepository` (e.g., `StudentRepository`). Spring automatically generates the implementation at runtime, providing instant access to methods like `findAll()`, `save()`, and `findById()`.
+Data access is handled by interfaces extending `JpaRepository` (e.g., `StudentRepository`, `BatchRepository`, `ExamRepository`). Spring automatically generates the implementation at runtime, providing instant access to methods like `findAll()`, `save()`, `findById()` plus derived queries such as `findByRollNo`, `findByBatch`, `countByBatch`, `findByExamId` and `findByNameIgnoreCase`.
+
+See `PROJECT_DETAILS.md` sections 7, 8 and 27 for connection details, example SQL and the ER diagram.
