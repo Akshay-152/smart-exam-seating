@@ -49,6 +49,7 @@ Student list (form / PDF / Excel / CSV)      Exam schedule (form / PDF / Excel /
 - Default batches **A–G** + custom batches through an **Add Course** button.
 - Exam-data upload via **PDF / Excel / CSV** with extraction + validation.
 - Student-list upload via PDF / Excel / CSV.
+- Room-number and desk-count upload via PDF / Excel / CSV with calculated room layout and capacity.
 - Automatic seating chart generation (re-runnable, idempotent).
 - Scheduling-conflict detection (schedule level + allocation level).
 - Final PDF: colour-coded seating grid **and** a student roster table
@@ -126,7 +127,8 @@ room-allocation-system/
 │       │       ├── ConflictService.java         # clash / double-booking detection
 │       │       ├── ExamImportService.java       # exam PDF/Excel/CSV import
 │       │       ├── FileTableReader.java         # shared PDF/Excel/CSV → rows
-│       │       └── ImportService.java           # student PDF/Excel/CSV import
+│       │       ├── ImportService.java           # student PDF/Excel/CSV import
+│       │       └── RoomImportService.java       # room number/desk count import
 │       └── resources/
 │           ├── application.properties           # DB, port, upload limits
 │           └── static/

@@ -7,7 +7,7 @@ status; each section below restates its requirement and what was built.
 
 Last verified: build `room-allocation-system-0.0.1-SNAPSHOT.jar` — application
 starts, full API test pass + `tools/test/cdp-test.mjs` **ALL UI TESTS PASSED**
-(38 checks, no page errors).
+(39 checks, no page errors).
 
 ---
 
@@ -72,6 +72,8 @@ starts, full API test pass + `tools/test/cdp-test.mjs` **ALL UI TESTS PASSED**
 - [x] `ChartPdfService` draws: header with exam details (branch, batch/course,
       date, time, application ID), colour-coded seating grid, and a **STUDENT
       LIST** table with **Roll No | Name | Branch | Batch/Course | Room | Seat**
+- [x] **Every row and column of the room grid is present in the PDF** (verified:
+      a 3×8 room renders R1–R3, C1–C8 labels, all desks, shared-desk slots)
 - [x] **No Division** in the PDF
 - [x] Verified by extracting the generated PDF text (`/api/chart/pdf` → header +
       roster rows present)
@@ -109,7 +111,9 @@ starts, full API test pass + `tools/test/cdp-test.mjs` **ALL UI TESTS PASSED**
 - [x] Timetable generation (allocation) for multiple exams — 14/14 students seated
 - [x] Scheduling/conflict handling: clash endpoint, import conflict report, allocation warnings
 - [x] PDF generation + final PDF data (header, roster and seat cells verified from extracted text)
-- [x] Existing functionality: full CDP UI suite — ALL TESTS PASSED (38 checks, no page errors)
+- [x] Room grid defaults: Students/Desk defaults to 3; desk prediction stays wide
+      & shallow (3–4 rows max: 12→3×4, 24→3×8, 20→4×5, 36→3×12)
+- [x] Existing functionality: full CDP UI suite — ALL TESTS PASSED (39 checks, no page errors)
 
 ## Remaining / not part of the requirements  `[ ] Pending`
 

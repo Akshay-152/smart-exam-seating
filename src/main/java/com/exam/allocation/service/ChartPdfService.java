@@ -3,7 +3,6 @@ package com.exam.allocation.service;
 import com.exam.allocation.model.Exam;
 import com.exam.allocation.model.Seat;
 import com.exam.allocation.model.Student;
-import com.exam.allocation.service.AllocationService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;

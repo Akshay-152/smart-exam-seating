@@ -329,13 +329,32 @@
             <form id="room-form" class="form-row" autocomplete="off">
                 <div class="field"><label>Room Number</label><input id="r-no" enterkeyhint="next" placeholder="e.g. 121"></div>
                 <div class="field"><label>Desks</label><input id="r-desks" data-k="desks" type="number" min="1" enterkeyhint="next" placeholder="e.g. 12"></div>
-                <div class="field"><label>Students / Desk</label><input id="r-per" data-k="per" type="number" min="1" enterkeyhint="next" value="1"></div>
+                <div class="field"><label>Students / Desk</label><input id="r-per" data-k="per" type="number" min="1" enterkeyhint="next" value="3"></div>
                 <div class="field"><label>Rows</label><input id="r-rows" data-k="rows" type="number" min="1" enterkeyhint="next" placeholder="auto"></div>
                 <div class="field"><label>Columns</label><input id="r-cols" data-k="cols" type="number" min="1" enterkeyhint="next" placeholder="auto"></div>
                 <div class="field"><label>Capacity</label><input id="r-cap" data-k="cap" type="number" min="0" enterkeyhint="go" placeholder="auto"></div>
                 <button type="button" class="btn btn-success" onclick="addRoom()">Add Room</button>
-            </form>
-            <div class="hint">Type <b>Desks</b> and rows/columns are auto-predicted (12 desks &rarr; 3 &times; 4); or type rows/columns and desks is derived. <b>Capacity = desks &times; students per desk</b> (auto-filled, still editable).</div>
+            </form>            <div class="hint">Type <b>Desks</b> and rows/columns are auto-predicted as a wide, shallow grid &mdash;3&ndash;4 rows max (12 &rarr;3&times;4,24 &rarr;3&times;8,20 &rarr;4&times;5); or type rows/columns and desks is derived. <b>Capacity = desks &times; students per desk</b> (auto-filled, still editable).</div>
+            <div class="dropzone">
+                <label for="room-import-file"><b>Import rooms</b> (PDF, Excel or CSV)</label><br>
+                <input type="file" id="room-import-file" accept=".pdf,.xlsx,.xls,.csv,.tsv,.txt">
+                <div class="hint" style="margin-top:.5rem">
+                    Required columns: <b>Room Number</b> and <b>Desks</b>. Students per desk defaults to 3; rows, columns and capacity are calculated automatically.
+                </div>
+                <div style="margin-top:.7rem">
+                    <button type="button" class="btn btn-success" onclick="uploadRoomImport()">Upload &amp; Import Rooms</button>
+                    <button type="button" class="btn btn-ghost" onclick="downloadRoomTemplate()">Download CSV template</button>
+                </div>
+            </div>
+            <div id="room-import-result" style="display:none">
+                <div class="count-row" id="room-import-counts"></div>
+                <ul class="import-notes" id="room-import-notes"></ul>
+                <h4>Import preview</h4>
+                <table>
+                    <thead><tr><th>Room Number</th><th>Desks</th><th>Status</th></tr></thead>
+                    <tbody id="room-import-preview"></tbody>
+                </table>
+            </div>
             <table>
                 <thead><tr><th>Room No</th><th>Rows</th><th>Columns</th><th>Desks</th><th>Students/Desk</th><th>Capacity</th><th class="actions no-print">Actions</th></tr></thead>
                 <tbody id="room-list"></tbody>
@@ -376,8 +395,7 @@
                 <button type="button" class="btn btn-ghost btn-sm" onclick="suggestAppId()" title="Auto-generate">Generate ID</button>
                 <button type="button" class="btn btn-amber" onclick="addExam()">Add Exam</button>
             </form>
-            <div class="hint">Leave branch/batch as &ldquo;All&rdquo; to include every student. Application ID is auto-generated when left blank.
-                Exams can also be uploaded as PDF/Excel from the <b>Import Data</b> tab.</div>
+            <div class="hint">Leave branch/batch as &ldquo;All&rdquo; to include every student. Application ID is auto-generated when left blank.</div>
             <div id="exam-conflicts" class="message-box" style="display:none"></div>
             <table>
                 <thead><tr><th>Exam</th><th>Branch</th><th>Batch / Course</th><th>Date</th><th>Time</th><th>Application ID</th><th class="actions no-print">Actions</th></tr></thead>
@@ -771,11 +789,21 @@
                     <button class="btn btn-sm btn-danger" data-act="delete" data-id="${r.id}">Delete</button>
                 </td></tr>`;
         }).join('');
-    }
-
-    /** Balanced grid for a desk count:12 desks -> 3 rows x 4 cols (cols >= rows, closest to square). */
+    }    /**
+     * Grid prediction for a desk count, kept WIDE and SHALLOW (3-4 rows max,
+     * at most12 columns):
+     *12 ->3x4,24 ->3x8,20 ->4x5,8 ->2x4,36 ->3x12.
+     * Desk counts without a small row divisor fall back to the
+     * closest-to-square layout (e.g.100 ->10x10).
+     */
     function predictGrid(desks) {
         if (!desks || desks < 1) return null;
+        const MAX_COLS = 12;
+        for (const rows of [3, 4, 2]) {
+            if (desks % rows === 0 && desks / rows >= rows && desks / rows <= MAX_COLS) {
+                return [rows, desks / rows];
+            }
+        }
         let best = null;
         for (let r = 1; r * r <= desks; r++) {
             if (desks % r === 0) {
@@ -815,7 +843,7 @@
         }
 
         const perEl = get('per');
-        const per = (perEl ? Number(perEl.value) : 0) || 1;
+        const per = (perEl ? Number(perEl.value) : 0) || 3;
         const auto = (rows > 0 && cols > 0 ? rows * cols : desks) * per;
         const capEl = get('cap');
         if (capEl && auto > 0) {
@@ -838,7 +866,7 @@
         const form = $('room-form');
         const val = k => Number(form.querySelector(`[data-k="${k}"]`).value) || 0;
         let rows = val('rows'), cols = val('cols'), desks = val('desks');
-        const per = val('per') || 1;
+        const per = val('per') || 3;
 
         // Desks typed but rows/columns not yet: predict the balanced grid.
         if ((!rows || !cols) && desks > 0) {
@@ -859,12 +887,47 @@
         try {
             await api('/api/rooms', jsonOpts('POST', payload));
             ['r-no', 'r-rows', 'r-cols', 'r-desks', 'r-cap'].forEach(id => $(id).value = '');
-            $('r-per').value = '1';
+            $('r-per').value = '3';
             delete $('r-cap').dataset.auto;
             $('r-no').focus();
             toast(`Room added: ${rows} x ${cols} desks, capacity ${payload.capacity}.`);
             await loadRooms();
         } catch (e) { toast(e.message, true); }
+    }
+    async function uploadRoomImport() {
+        const input = $('room-import-file');
+        if (!input.files.length) { toast('Choose a PDF or Excel file with room numbers and desk counts first.', true); return; }
+        const fd = new FormData();
+        fd.append('file', input.files[0]);
+        try {
+            const res = await api('/api/import/rooms', { method: 'POST', body: fd });
+            $('room-import-result').style.display = 'block';
+            $('room-import-counts').innerHTML = `
+                <div class="count"><b>${res.imported}</b> new rooms</div>
+                <div class="count"><b>${res.updated}</b> updated</div>
+                <div class="count"><b>${res.invalid}</b> invalid rows</div>
+                <div class="count"><b>${res.skipped}</b> blank rows</div>`;
+            $('room-import-notes').innerHTML = (res.notes || []).map(n => `<li>${esc(n)}</li>`).join('');
+            $('room-import-preview').innerHTML = res.preview && res.preview.length
+                ? res.preview.map(room => `<tr><td>${esc(room.roomNumber)}</td><td>${esc(room.desks)}</td>
+                    <td>${room.status === 'NEW'
+                        ? '<span class="badge" style="background:#10B981">NEW</span>'
+                        : '<span class="badge" style="background:#F59E0B">UPDATED</span>'}</td></tr>`).join('')
+                : '<tr><td colspan="3" class="empty">No valid rooms imported.</td></tr>';
+            toast(`Rooms imported: ${res.imported} new, ${res.updated} updated, ${res.invalid} invalid.`);
+            input.value = '';
+            await loadRooms();
+        } catch (e) { toast(e.message, true); }
+    }
+    function downloadRoomTemplate() {
+        const csv = 'room number,desks\n121,12\n122,24\n123,20\n';
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'room-import-template.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
     }
     $('room-list').addEventListener('click', async e => {
         const btn = e.target.closest('button');

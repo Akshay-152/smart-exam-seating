@@ -159,18 +159,33 @@ try {
     [...document.querySelectorAll('#room-form button')].find(b => b.textContent.includes('Add Room')).click();
     await sleep(1300);
     out.added = document.querySelector('#room-list').textContent.includes('200');
-    out.formReset = $('r-desks').value === '' && $('r-per').value === '1';
+    out.formReset = $('r-desks').value === '' && $('r-per').value === '3';
 
     // cleanup: delete the room created by this test
     const del = [...document.querySelectorAll('#room-list tr')]
       .find(tr => tr.textContent.includes('200'))?.querySelector('button[data-act="delete"]');
     if (del) { del.click(); await sleep(1300); }
     out.deleted = !document.querySelector('#room-list').textContent.includes('200');
+
+    // Wide-and-shallow prediction:24 desks ->3x8,20 ->4x5,36 ->3x12
+    const typeDesks = v => {
+      $('r-desks').value = v;
+      $('r-desks').dispatchEvent(new Event('input', { bubbles: true }));
+      return $('r-rows').value + 'x' + $('r-cols').value;
+    };
+    out.pred24 = typeDesks('24');
+    out.pred20 = typeDesks('20');
+    out.pred36 = typeDesks('36');
+    // reset the form so later tests see a clean state
+    ['r-no', 'r-rows', 'r-cols', 'r-desks', 'r-cap'].forEach(id => $(id).value = '');
     return out;
   })()`);
   check('rooms tab lists rooms', results.rooms.rows >= 2 && results.rooms.hasGrid, JSON.stringify({ rows: results.rooms.rows }));
   check('desk count predicts rows x columns', results.rooms.predRows === '3' && results.rooms.predCols === '4',
         `${results.rooms.predRows}x${results.rooms.predCols}`);
+  check('grid stays wide & shallow (3-4 rows max)',
+        results.rooms.pred24 === '3x8' && results.rooms.pred20 === '4x5' && results.rooms.pred36 === '3x12',
+        `24=${results.rooms.pred24} 20=${results.rooms.pred20} 36=${results.rooms.pred36}`);
   check('capacity auto = desks x students/desk', results.rooms.autoCap === '24', 'cap=' + results.rooms.autoCap);
   check('room created & form reset', results.rooms.added && results.rooms.formReset);
   check('test room cleaned up', results.rooms.deleted);
