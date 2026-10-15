@@ -17,8 +17,9 @@ PDF that includes the student list with Roll Number, Name, Branch and Batch.
   extracted, validated (rows without a subject or a parseable date are rejected
   and reported) and stored in the database for timetable generation.
 - **Student-list upload** — import student lists from the same formats.
-- **Room-list upload** — import room numbers and desk counts from PDF, Excel
-  (.xlsx/.xls) or CSV; rows, columns and capacity are calculated automatically.
+- **Room-list upload** — from the **Import Data → Rooms** tab, import room
+  numbers and desk counts from PDF, Excel (.xlsx/.xls) or CSV; rows, columns and
+  capacity are calculated automatically.
 - **Seating allocation** — round-robin interleaving across branch·batch groups,
   subject-mixing at shared desks, re-runnable and idempotent.
 - **Conflict detection** — same date + time + audience exam clashes, plus
@@ -61,9 +62,9 @@ To use MySQL instead, start `docker-compose up -d` and switch the
 ## Typical workflow
 
 1. **Students** tab — add students (Roll No, Name, Branch, Batch) or import a list.
-2. **Rooms** tab — add rooms manually or import room numbers and desk counts from a file.
+2. **Rooms** tab — add rooms manually.
 3. **Courses** tab — keep the defaults A–G or add custom batches.
-4. **Import Data** tab — upload the exam schedule as PDF/Excel/CSV (or create exams manually).
+4. **Import Data** tab — upload students, rooms or the exam schedule as PDF/Excel/CSV (or create exams manually).
 5. **Exams** tab — review exams and any reported scheduling conflicts.
 6. **Seating Chart** tab — generate the chart, check conflict warnings, download the PDF.
 

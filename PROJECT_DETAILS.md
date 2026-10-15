@@ -49,7 +49,8 @@ Student list (form / PDF / Excel / CSV)      Exam schedule (form / PDF / Excel /
 - Default batches **A–G** + custom batches through an **Add Course** button.
 - Exam-data upload via **PDF / Excel / CSV** with extraction + validation.
 - Student-list upload via PDF / Excel / CSV.
-- Room-number and desk-count upload via PDF / Excel / CSV with calculated room layout and capacity.
+- Room-number and desk-count upload via PDF / Excel / CSV with calculated room layout and capacity
+  (**Import Data → Rooms** tab, `POST /api/import/rooms`).
 - Automatic seating chart generation (re-runnable, idempotent).
 - Scheduling-conflict detection (schedule level + allocation level).
 - Final PDF: colour-coded seating grid **and** a student roster table
@@ -192,7 +193,7 @@ There is **no `uploads` folder** — uploaded files are parsed in memory
 
 | File | Location | Purpose | Important Functions |
 |---|---|---|---|
-| `index.html` | `src/main/resources/static/` | The whole frontend: tabs, forms, tables, chart rendering | `addStudent()`, `addBatch()`, `addExam()`, `uploadImport()`, `uploadExamImport()`, `generateAllocation()`, `renderChart()`, `downloadChartPdf()` |
+| `index.html` | `src/main/resources/static/` | The whole frontend: tabs, forms, tables, chart rendering | `addStudent()`, `addBatch()`, `addExam()`, `setImportMode()`, `uploadImport()`, `uploadExamImport()`, `uploadRoomImport()`, `generateAllocation()`, `renderChart()`, `downloadChartPdf()` |
 | `AllocationService.java` | `service/` | Core seating algorithm | `generateAllocation(examId, roomIds)`, `fillDesk()`, `prepareSeats()`, `interleave()`, `matchesExam()` |
 | `AllocationController.java` | `controller/` | REST for students/rooms/allocate/seats | `getAllStudents()`, `addStudent()`, `generateAllocation()`, `getAllSeats()` |
 | `ExamImportService.java` | `service/` | Extracts exam rows from PDF/Excel/CSV, validates, stores | `importExams(file)`, `extract()`, `parseDateValue()`, `parseTimeValue()` |
@@ -209,7 +210,7 @@ There is **no `uploads` folder** — uploaded files are parsed in memory
 | `application.properties` | `resources/` | DB URL, H2 console, port, upload size limits | — |
 | `pom.xml` | root | Dependencies (Spring, PDFBox, POI, DB drivers), Java 17 | — |
 | `seed.sh` | `tools/test/` | Resets and seeds baseline data through the API | `delete_all()`, POST students/rooms/exam/allocate/import |
-| `cdp-test.mjs` | `tools/test/` | End-to-end UI test (38 checks) driving Chrome via CDP | `check()`, `evaluate()`, per-tab test blocks |
+| `cdp-test.mjs` | `tools/test/` | End-to-end UI test (39 checks) driving Chrome via CDP | `check()`, `evaluate()`, per-tab test blocks |
 
 **Data flow of the two biggest files**
 - `ExamImportService`: file bytes in → validated `Exam` rows + conflict messages out.
@@ -633,11 +634,11 @@ Every stage is implemented; failures at extraction/validation stop that row
 |---|---|---|---|
 | **Dashboard** | Overview counters + workflow hints | Jump buttons to each tab | `GET /api/students`, `/api/rooms`, `/api/exams`, `/api/seats`, `/api/batches` |
 | **Students** | Manage student info (Roll No, Name, Branch, Batch) | Add, search, inline edit, delete | `GET/POST /api/students`, `PUT/DELETE /api/students/{id}` |
-| **Rooms** | Manage exam rooms | Add (desk/rows/columns auto-calc), edit, delete | `GET/POST /api/rooms`, `PUT/DELETE /api/rooms/{id}` |
+| **Rooms** | Manage exam rooms | Add (desk/rows/columns auto-calc), edit, delete (bulk file import lives in **Import Data → Rooms**) | `GET/POST /api/rooms`, `PUT/DELETE /api/rooms/{id}` |
 | **Courses** | Course/batch management (defaults A–G) | **Add Course**, delete custom batches (guard when in use) | `GET/POST /api/batches`, `DELETE /api/batches/{id}` |
 | **Exams** | Exam list + scheduling conflicts | Create/edit/delete exams, view clash panel | `GET/POST /api/exams`, `PUT/DELETE /api/exams/{id}`, `GET /api/exams/conflicts` |
 | **Seating Chart** | Generate and view the timetable | Pick exam, generate, see stats/conflicts/unseated chips, download PDF, print | `POST /api/allocate`, `GET /api/seats?examId=`, `GET /api/chart/pdf?examId=` |
-| **Import Data** | Upload student lists **and exam data** | Mode switch (Student List / Exam Data), upload, preview, template download | `POST /api/import/students`, `POST /api/import/exams` |
+| **Import Data** | Upload student lists, **exam data and rooms** | Mode switch (Student List / Exam Data / Rooms), upload, preview, template download | `POST /api/import/students`, `POST /api/import/exams`, `POST /api/import/rooms` |
 | Settings / Admin / Login | — | **Not Implemented** (Admin entity is a Planned stub) | — |
 
 ---
@@ -817,7 +818,7 @@ exist yet — `spring-boot-starter-test` is available if unit tests are added).
 
 | Test | File | Covers |
 |---|---|---|
-| UI end-to-end (38 checks) | `tools/test/cdp-test.mjs` | Dashboard stats, student CRUD + Enter navigation, room desk/capacity math, **batches tab (A–G + Add Course + delete)**, exam creation + auto app-ID, **allocation + shared desks + legend**, **student file import**, **exam file import incl. invalid-row rejection and clash reporting**, **double-booking warnings**, PDF reachability, zero page errors |
+| UI end-to-end (39 checks) | `tools/test/cdp-test.mjs` | Dashboard stats, student CRUD + Enter navigation, room desk/capacity math, **batches tab (A–G + Add Course + delete)**, exam creation + auto app-ID, **allocation + shared desks + legend**, **student file import**, **exam file import incl. invalid-row rejection and clash reporting**, **double-booking warnings**, PDF reachability, zero page errors |
 | Data seeding | `tools/test/seed.sh` | Resets data, posts students (branch/batch), rooms, exam, baseline allocation, student fixture imports |
 | Fixture generators | `make_xlsx.py`, `make_exam_xlsx.py`, `MakePdf.java`, `MakeExamPdf.java` | Build the `.xlsx`/`.pdf` upload fixtures (incl. missing cells & invalid rows) |
 | PDF extraction debug | `ExtractPdf.java` | Prints exactly what the importer sees |

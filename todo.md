@@ -9,6 +9,12 @@ Last verified: build `room-allocation-system-0.0.1-SNAPSHOT.jar` — application
 starts, full API test pass + `tools/test/cdp-test.mjs` **ALL UI TESTS PASSED**
 (39 checks, no page errors).
 
+Update 2026-10-15: the room import form moved from the **Rooms** tab to the
+**Import Data → Rooms** tab (all file uploads now live on the Import Data
+dashboard). Verified: 39-check UI suite passes, and a CSV uploaded through the
+moved form reported `2 new rooms / 0 invalid` with both rooms listed on the
+Rooms tab.
+
 ---
 
 ## 1. Student Information  `[x] Completed`
@@ -114,12 +120,18 @@ starts, full API test pass + `tools/test/cdp-test.mjs` **ALL UI TESTS PASSED**
 - [x] Room grid defaults: Students/Desk defaults to 3; desk prediction stays wide
       & shallow (3–4 rows max: 12→3×4, 24→3×8, 20→4×5, 36→3×12)
 - [x] Existing functionality: full CDP UI suite — ALL TESTS PASSED (39 checks, no page errors)
+- [x] Room file import (PDF/Excel/CSV) works from its new home, the
+      **Import Data → Rooms** tab: upload → counts/preview shown → rooms appear
+      on the Rooms tab (CSV fixture, `2 new / 0 invalid`)
 
 ## Remaining / not part of the requirements  `[ ] Pending`
 
 - [ ] Authentication & admin login (`Admin` entity is a Planned stub —
       **not required** by this requirement list, no auth was requested)
-- [ ] JUnit unit-test classes in `src/test` (coverage currently provided by the
-      end-to-end suite in `tools/test/`)
+- [ ] JUnit unit-test coverage beyond the end-to-end suite in `tools/test/` —
+      `src/test/.../RoomImportServiceTest.java` exists but currently **errors on
+      Java 25** (Mockito inline mock maker cannot instrument `FileTableReader`);
+      it is unrelated to the UI changes above and needs a Mockito/byte-buddy
+      upgrade to run again
 
 No requirement from this list is left unimplemented.

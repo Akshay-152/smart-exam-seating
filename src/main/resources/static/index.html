@@ -335,26 +335,7 @@
                 <div class="field"><label>Capacity</label><input id="r-cap" data-k="cap" type="number" min="0" enterkeyhint="go" placeholder="auto"></div>
                 <button type="button" class="btn btn-success" onclick="addRoom()">Add Room</button>
             </form>            <div class="hint">Type <b>Desks</b> and rows/columns are auto-predicted as a wide, shallow grid &mdash;3&ndash;4 rows max (12 &rarr;3&times;4,24 &rarr;3&times;8,20 &rarr;4&times;5); or type rows/columns and desks is derived. <b>Capacity = desks &times; students per desk</b> (auto-filled, still editable).</div>
-            <div class="dropzone">
-                <label for="room-import-file"><b>Import rooms</b> (PDF, Excel or CSV)</label><br>
-                <input type="file" id="room-import-file" accept=".pdf,.xlsx,.xls,.csv,.tsv,.txt">
-                <div class="hint" style="margin-top:.5rem">
-                    Required columns: <b>Room Number</b> and <b>Desks</b>. Students per desk defaults to 3; rows, columns and capacity are calculated automatically.
-                </div>
-                <div style="margin-top:.7rem">
-                    <button type="button" class="btn btn-success" onclick="uploadRoomImport()">Upload &amp; Import Rooms</button>
-                    <button type="button" class="btn btn-ghost" onclick="downloadRoomTemplate()">Download CSV template</button>
-                </div>
-            </div>
-            <div id="room-import-result" style="display:none">
-                <div class="count-row" id="room-import-counts"></div>
-                <ul class="import-notes" id="room-import-notes"></ul>
-                <h4>Import preview</h4>
-                <table>
-                    <thead><tr><th>Room Number</th><th>Desks</th><th>Status</th></tr></thead>
-                    <tbody id="room-import-preview"></tbody>
-                </table>
-            </div>
+            <div class="hint">Bulk import room numbers and desk counts from the <b>Import Data &rarr; Rooms</b> tab (PDF, Excel or CSV).</div>
             <table>
                 <thead><tr><th>Room No</th><th>Rows</th><th>Columns</th><th>Desks</th><th>Students/Desk</th><th>Capacity</th><th class="actions no-print">Actions</th></tr></thead>
                 <tbody id="room-list"></tbody>
@@ -435,6 +416,7 @@
             <div class="toolbar no-print" style="margin-bottom:1rem">
                 <button class="btn" id="mode-students-btn" onclick="setImportMode('students')">Student List</button>
                 <button class="btn btn-amber" id="mode-exams-btn" onclick="setImportMode('exams')">Exam Data</button>
+                <button class="btn btn-success" id="mode-rooms-btn" onclick="setImportMode('rooms')">Rooms</button>
             </div>
 
             <div id="import-mode-students">
@@ -482,6 +464,29 @@
                     <table>
                         <thead><tr><th>Subject</th><th>Branch</th><th>Batch / Course</th><th>Date</th><th>Time</th><th>Application ID</th><th>Status</th></tr></thead>
                         <tbody id="exam-import-preview"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="import-mode-rooms" style="display:none">
+                <div class="dropzone">
+                    <label for="room-import-file"><b>Import rooms</b> (PDF, Excel or CSV)</label><br>
+                    <input type="file" id="room-import-file" accept=".pdf,.xlsx,.xls,.csv,.tsv,.txt">
+                    <div class="hint" style="margin-top:.5rem">
+                        Required columns: <b>Room Number</b> and <b>Desks</b>. Students per desk defaults to 3; rows, columns and capacity are calculated automatically.
+                    </div>
+                    <div style="margin-top:.7rem">
+                        <button class="btn btn-success" onclick="uploadRoomImport()">Upload &amp; Import Rooms</button>
+                        <button class="btn btn-ghost" onclick="downloadRoomTemplate()">Download CSV template</button>
+                    </div>
+                </div>
+                <div id="room-import-result" style="display:none">
+                    <div class="count-row" id="room-import-counts"></div>
+                    <ul class="import-notes" id="room-import-notes"></ul>
+                    <h4>Import preview</h4>
+                    <table>
+                        <thead><tr><th>Room Number</th><th>Desks</th><th>Status</th></tr></thead>
+                        <tbody id="room-import-preview"></tbody>
                     </table>
                 </div>
             </div>
@@ -1340,13 +1345,19 @@
         a.remove();
     }
 
-    /* ---- import mode switch (students / exam data) ---- */
+    /* ---- import mode switch (students / exam data / rooms) ---- */
     function setImportMode(mode) {
-        const isStudents = mode !== 'exams';
-        $('import-mode-students').style.display = isStudents ? 'block' : 'none';
-        $('import-mode-exams').style.display = isStudents ? 'none' : 'block';
-        $('mode-students-btn').className = 'btn' + (isStudents ? ' btn-success' : ' btn-ghost');
-        $('mode-exams-btn').className = 'btn' + (isStudents ? ' btn-ghost' : ' btn-amber');
+        ['students', 'exams', 'rooms'].forEach(m => {
+            $('import-mode-' + m).style.display = mode === m ? 'block' : 'none';
+        });
+        const on = {
+            students: ' btn-success',
+            exams: ' btn-amber',
+            rooms: ' btn-success'
+        };
+        ['students', 'exams', 'rooms'].forEach(m => {
+            $('mode-' + m + '-btn').className = 'btn' + (mode === m ? on[m] : ' btn-ghost');
+        });
     }
 
     /* ---- exam data upload (PDF / Excel / CSV) ---- */
