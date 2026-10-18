@@ -5,29 +5,49 @@ This document explains how the database is connected and managed in the Room All
 ## Overview
 The project uses **Spring Data JPA** (Java Persistence API) paired with **Hibernate** as the Object-Relational Mapping (ORM) tool. This allows us to interact with the database using Java objects (Entities) without writing raw SQL queries.
 
-## Current Configuration (H2 In-Memory)
-To make testing seamless, the system is currently configured to use an **H2 In-Memory Database**. This means the database is created in RAM when the application starts and is destroyed when it stops. 
+## Current Configuration (MySQL)
+The application uses MySQL by default. Start the local MySQL 8 server with Docker Compose:
 
-The connection properties are defined in `src/main/resources/application.properties`:
-```properties
-spring.datasource.url=jdbc:h2:mem:room_allocation_db
-spring.datasource.driverClassName=org.h2.Driver
-spring.datasource.username=sa
-spring.datasource.password=
-spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
-spring.h2.console.enabled=true
+```powershell
+docker compose up -d
 ```
-* **H2 Console:** You can view the live database and run queries by navigating to `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:room_allocation_db`, Username: `sa`, Password: `[blank]`).
 
-## Switching to MySQL (Production Ready)
-When you are ready to switch to a persistent database like MySQL, you simply update `application.properties`:
+The default connection settings in `src/main/resources/application.properties`
+match the Compose service (user `root`, password `Akshay@6235`) — the same
+password is used for a natively installed MySQL 8 on port 3306:
+
 ```properties
 spring.datasource.url=jdbc:mysql://localhost:3306/room_allocation_db?createDatabaseIfNotExist=true
-spring.datasource.username=root
-spring.datasource.password=your_password
-spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+spring.datasource.username=${DB_USERNAME:root}
+spring.datasource.password=${DB_PASSWORD:Akshay@6235}
 ```
-* Note: A `docker-compose.yml` file is also included in the root directory if you wish to easily spin up a MySQL instance.
+
+Run the Spring Boot app after MySQL has started. Hibernate creates or updates
+the tables at startup.
+
+### Connect with MySQL Workbench
+Create a connection using:
+
+| Setting | Value |
+|---|---|
+| Hostname | `127.0.0.1` |
+| Port | `3306` |
+| Username | `root` |
+| Password | `Akshay@6235` (local development default) |
+
+After connecting, refresh **Schemas** and open `room_allocation_db` to browse
+its tables. For the SQL commands that show data, see
+[`mysql-commands.md`](mysql-commands.md). The Compose root password can be overridden with the
+`MYSQL_ROOT_PASSWORD` environment variable; set the same password for the Spring
+app using `DB_PASSWORD`.
+
+For a non-Docker MySQL installation, create the `room_allocation_db` schema and
+set `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` environment variables before
+launching the app. Do not use the local development password in a shared or
+production environment.
+
+H2 remains included as a runtime dependency for explicitly configured tests or
+demo use, but the H2 web console is not enabled by default.
 
 ## How Entities Map to Tables
 The system uses the `@Entity` annotation on Java classes to automatically generate database tables.

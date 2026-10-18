@@ -18,6 +18,8 @@ import jakarta.persistence.*;
 @Entity
 public class Student {
 
+    public enum AccountStatus { ACTIVE, INACTIVE }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -29,6 +31,24 @@ public class Student {
 
     /** Branch / department the student belongs to, e.g. "CEC". */
     private String branch;
+
+    /** Longer department name (e.g. "Computer Engineering"); defaults to the branch code. */
+    private String department;
+
+    /** Semester the student is currently in (1..8). */
+    private Integer semester;
+
+    private String email;
+
+    private String phone;
+
+    /** Login account status - INACTIVE students cannot sign in. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AccountStatus accountStatus = AccountStatus.ACTIVE;
+
+    @Column(nullable = false)
+    private java.time.Instant createdAt = java.time.Instant.now();
 
     /**
      * Batch / Course the student belongs to, e.g. "E".
@@ -55,4 +75,22 @@ public class Student {
 
     public String getBatch() { return batch; }
     public void setBatch(String batch) { this.batch = batch; }
+
+    public String getDepartment() { return department; }
+    public void setDepartment(String department) { this.department = department; }
+
+    public Integer getSemester() { return semester; }
+    public void setSemester(Integer semester) { this.semester = semester; }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+
+    public AccountStatus getAccountStatus() { return accountStatus; }
+    public void setAccountStatus(AccountStatus accountStatus) { this.accountStatus = accountStatus; }
+
+    public java.time.Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(java.time.Instant createdAt) { this.createdAt = createdAt; }
 }

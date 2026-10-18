@@ -40,6 +40,9 @@ public class ImportService {
     @Autowired
     private BatchService batchService;
 
+    @Autowired
+    private UserAccountService userAccountService;
+
     public static class ImportResult {
         private String fileName;
         private int imported;     // brand-new students
@@ -194,6 +197,11 @@ public class ImportService {
         }
         if (result.getMissingCells() > 0) {
             result.getNotes().add(result.getMissingCells() + " missing cell(s) were stored as null.");
+        }
+        // Every imported student (with a roll number) can now sign in immediately.
+        int accounts = userAccountService.ensureStudentAccounts();
+        if (accounts > 0) {
+            result.getNotes().add(accounts + " student login account(s) created (roll no = initial password).");
         }
         return result;
     }

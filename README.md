@@ -35,7 +35,7 @@ PDF that includes the student list with Roll Number, Name, Branch and Batch.
 | Layer     | Technology |
 |-----------|------------|
 | Backend   | Java 17+, Spring Boot 3.2 (Web, Data JPA) |
-| Database  | H2 in-memory by default (MySQL/PostgreSQL drivers included, `docker-compose.yml` provided) |
+| Database  | MySQL 8 by default (Docker Compose); MySQL/PostgreSQL drivers included |
 | PDF       | Apache PDFBox 2.0.31 (generation **and** text extraction for import) |
 | Excel     | Apache POI 5.2.5 |
 | Frontend  | Single-page HTML/CSS/vanilla JS served from `src/main/resources/static/index.html` |
@@ -47,17 +47,21 @@ PDF that includes the student list with Roll Number, Name, Branch and Batch.
 #1. Build
 ./.mvn-tool/apache-maven-3.9.9/bin/mvn clean package -DskipTests
 
-#2. Start (H2 in-memory database, port 8080 by default)
+#2. Start MySQL
+docker compose up -d
+
+#3. Start the app (port 8080 by default; DB defaults match docker-compose.yml)
 java -jar target/room-allocation-system-0.0.1-SNAPSHOT.jar
 
-#3. Open the UI
+#4. Open the UI
 #    http://localhost:8080
-#    H2 console: http://localhost:8080/h2-console  (JDBC URL jdbc:h2:mem:room_allocation_db, user sa, empty password)
 ```
 
-To use MySQL instead, start `docker-compose up -d` and switch the
-`spring.datasource.*` values in `src/main/resources/application.properties`
-(see `database.md`).
+Connect MySQL Workbench to `127.0.0.1:3306` with username `root` and local
+development password `Akshay@6235`; refresh Schemas to browse `room_allocation_db`
+(see [mysql-commands.md](mysql-commands.md) for SQL commands to show the data).
+The app accepts `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` environment variables
+to override its MySQL connection settings. See `database.md` for details.
 
 ## Typical workflow
 

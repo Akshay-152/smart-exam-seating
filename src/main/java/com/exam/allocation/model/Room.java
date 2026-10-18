@@ -28,6 +28,16 @@ public class Room {
     /** How many students share one desk/bench (exam desks often seat 2). */
     private int studentsPerDesk = 1;
 
+    /** Building the room is in, e.g. "Block A". */
+    private String building;
+
+    /** Floor number (0 = ground floor). */
+    private Integer floor;
+
+    /** Inactive rooms are kept for history but never used for new allocations. */
+    @Column(nullable = false)
+    private boolean active = true;
+
     // @JsonIgnore breaks the Seat -> Room -> Seat serialization cycle that
     // previously made /api/rooms return an infinitely nested JSON payload.
     @JsonIgnore
@@ -57,6 +67,23 @@ public class Room {
     public int getStudentsPerDesk() { return studentsPerDesk < 1 ? 1 : studentsPerDesk; }
     public void setStudentsPerDesk(int studentsPerDesk) {
         this.studentsPerDesk = studentsPerDesk < 1 ? 1 : studentsPerDesk;
+    }
+
+    public String getBuilding() { return building; }
+    public void setBuilding(String building) { this.building = building; }
+
+    public Integer getFloor() { return floor; }
+    public void setFloor(Integer floor) { this.floor = floor; }
+
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
+
+    /** Human readable name used in charts and seating slips, e.g. "Room 6, Block A, Floor 1". */
+    public String getDisplayName() {
+        StringBuilder sb = new StringBuilder(roomNumber == null ? "Room" : roomNumber);
+        if (building != null && !building.isBlank()) sb.append(", ").append(building.trim());
+        if (floor != null) sb.append(", Floor ").append(floor);
+        return sb.toString();
     }
 
     public List<Seat> getSeats() { return seats; }

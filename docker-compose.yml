@@ -4,7 +4,7 @@ services:
     image: mysql:8.0
     container_name: room-allocation-db
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Akshay@6235}
       MYSQL_DATABASE: room_allocation_db
     ports:
       - "3306:3306"

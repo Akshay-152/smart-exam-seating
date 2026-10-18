@@ -68,8 +68,9 @@ Student list (form / PDF / Excel / CSV)      Exam schedule (form / PDF / Excel /
 | **Spring Web** | `spring-boot-starter-web` | REST controllers, multipart file upload |
 | **Spring Data JPA** | `spring-boot-starter-data-jpa` | ORM layer, repositories, transactions |
 | **Hibernate** | via Spring Data JPA | JPA implementation, automatic DDL (`ddl-auto=update`) |
-| **H2 (in-memory)** | `spring.datasource.url=jdbc:h2:mem:...` | Default database — zero-setup development/demo |
-| **MySQL connector** | `mysql-connector-j` (runtime) | Optional production database |
+| **MySQL 8** | `spring.datasource.url=jdbc:mysql:...` | Default database — local instance provided by Docker Compose |
+| **H2 (in-memory)** | `h2` (runtime) | Available for explicitly configured tests/demo use |
+| **MySQL connector** | `mysql-connector-j` (runtime) | Default database driver |
 | **PostgreSQL driver** | `postgresql` (runtime) | Optional production database |
 | **Apache PDFBox 2.0.31** | `pdfbox` | PDF **generation** of the seating chart and PDF **text extraction** for imports |
 | **Apache POI 5.2.5** | `poi-ooxml` | Reading Excel `.xlsx` / `.xls` uploads |
@@ -207,7 +208,7 @@ There is **no `uploads` folder** — uploaded files are parsed in memory
 | `ImportController.java` | `controller/` | `POST /api/import/students`, `POST /api/import/exams` | `importStudents()`, `importExams()` |
 | `Student.java` | `model/` | Student entity: `rollNo`, `name`, `branch`, `batch` | getters/setters only |
 | `Seat.java` | `model/` | Seat ↔ Room, Seat ↔ Student, Seat ↔ Exam links | getters/setters only |
-| `application.properties` | `resources/` | DB URL, H2 console, port, upload size limits | — |
+| `application.properties` | `resources/` | MySQL URL, port, upload size limits | — |
 | `pom.xml` | root | Dependencies (Spring, PDFBox, POI, DB drivers), Java 17 | — |
 | `seed.sh` | `tools/test/` | Resets and seeds baseline data through the API | `delete_all()`, POST students/rooms/exam/allocate/import |
 | `cdp-test.mjs` | `tools/test/` | End-to-end UI test (39 checks) driving Chrome via CDP | `check()`, `evaluate()`, per-tab test blocks |
@@ -231,7 +232,7 @@ Service layer  —  business logic (allocation, import, conflicts, PDF, batches)
    ↓
 Repository layer  —  Spring Data JPA (interface + Hibernate)
    ↓
-SQL Database  —  H2 in-memory (default) / MySQL / PostgreSQL
+SQL Database  —  MySQL (default) / H2 / PostgreSQL
 ```
 
 **Layer responsibilities**
@@ -249,16 +250,16 @@ SQL Database  —  H2 in-memory (default) / MySQL / PostgreSQL
 
 # 7. Database / SQL Connection
 
-- **Database type**: H2 **in-memory** by default; MySQL and PostgreSQL supported
-  (drivers bundled, `docker-compose.yml` provided).
+- **Database type**: MySQL by default; PostgreSQL and H2 drivers are also bundled.
 - **Configuration file**: `src/main/resources/application.properties`
-- **Connection URL**: `jdbc:h2:mem:room_allocation_db`
-- **Driver**: `org.h2.Driver`
-- **Username**: `sa` — **Password**: *(empty, development default only)*
-- **ORM**: Spring Data JPA / Hibernate, dialect `H2Dialect`
+- **Connection URL**: `jdbc:mysql://localhost:3306/room_allocation_db?createDatabaseIfNotExist=true`
+- **Driver**: `com.mysql.cj.jdbc.Driver`
+- **Username**: `root` — **Password**: `Akshay@6235` (local Docker Compose development defaults)
+- **Workbench**: connect to `127.0.0.1:3306`, then browse schema `room_allocation_db`.
+- **ORM**: Spring Data JPA / Hibernate, dialect `MySQLDialect`
 - **DDL**: `spring.jpa.hibernate.ddl-auto=update` → Hibernate creates/alters the
   tables from the entities at startup.
-- **H2 web console**: `http://localhost:8080/h2-console`
+- **Overrides**: set `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` environment variables.
 
 Safe example configuration (no real secrets — put production credentials in
 environment variables, never in the repository):
@@ -706,7 +707,7 @@ checks) plus Spring's `MultipartException` handling for missing/oversized files
 
 | File | Controls | Safe to change? | Secrets? |
 |---|---|---|---|
-| `src/main/resources/application.properties` | App name, **database URL/driver/user**, H2 console, Hibernate DDL mode, **server port** (`8080`), multipart upload limits (20 MB), error message exposure | Yes — DB settings and port live here | DB password here is **empty (H2 dev default)**; production credentials must come from environment variables |
+| `src/main/resources/application.properties` | App name, **database URL/driver/user**, Hibernate DDL mode, **server port** (`8080`), multipart upload limits (20 MB), error message exposure | Yes — DB settings and port live here | Local MySQL defaults are for development only; production credentials must come from environment variables |
 | `pom.xml` | Dependencies, Java version, Spring Boot version, packaging | Yes (keep versions consistent) | No |
 | `docker-compose.yml` | Local MySQL 8 service, port3006, database name `room_allocation_db` | Yes — **change the local root password before any shared use** | Contains a local-dev placeholder password (`root`); replace via environment variable in real deployments |
 | `.vscode/settings.json` | Editor behaviour only | Yes | No |
@@ -722,8 +723,8 @@ no build tooling).
 ```text
 1. Install prerequisites : JDK17+ (project builds on newer JDKs too), Node18+
                            (only for the UI test), Python3 (only to regenerate fixtures)
-2. Configure database    : default H2 needs nothing; optional MySQL: docker-compose up -d
-3. Environment variables : none required for the default setup
+2. Configure database    : start local MySQL with docker compose up -d
+3. Environment variables : optional DB_URL, DB_USERNAME, DB_PASSWORD overrides
 4. Install dependencies   : resolved automatically by Maven on first build
 5. Build project          : mvn clean package -DskipTests
 6. Start application      : java -jar target/room-allocation-system-0.0.1-SNAPSHOT.jar
@@ -736,7 +737,7 @@ Exact commands (bundled Maven, no global install):
 # build
 ./.mvn-tool/apache-maven-3.9.9/bin/mvn clean package -DskipTests
 
-# run (default port8080, H2 in-memory)
+# run (default port8080, MySQL)
 java -jar target/room-allocation-system-0.0.1-SNAPSHOT.jar
 
 # run on another port (used by the test suite)
@@ -753,8 +754,8 @@ node tools/test/cdp-test.mjs
 
 | Aspect | Development | Production |
 |---|---|---|
-| Database | H2 in-memory (`jdbc:h2:mem:...`) — data lost on restart | MySQL/PostgreSQL via `docker-compose.yml` or a real server; set `spring.datasource.*` accordingly |
-| Credentials | Empty H2 password (local only) | Pass `DB_USERNAME`/`DB_PASSWORD` as environment variables; never commit them |
+| Database | MySQL via `docker-compose.yml`; persistent Docker volume | MySQL/PostgreSQL via a managed or self-hosted server; set `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` |
+| Credentials | Local development defaults in Compose/application config | Pass `DB_USERNAME`/`DB_PASSWORD` as environment variables; never commit production secrets |
 | Build | `mvn package` on demand, `show-sql=true` for debugging | `mvn clean package`, set `spring.jpa.show-sql=false` |
 | Logging | SQL printed to console | Reduce logging; send to a log store |
 | Port | `8080`/`8081` behind no proxy | Put behind a reverse proxy with TLS |
@@ -768,9 +769,8 @@ node tools/test/cdp-test.mjs
 - **Password handling**: no user login exists (**Not Implemented**). The
   `Admin` entity has a `password` column reserved for a future
   authentication feature; nothing writes to it today.
-- **Database credentials**: development H2 uses an empty password; production
-  credentials must be supplied via environment variables. **No real password,
-  API key or token appears anywhere in this repository or in this document.**
+- **Database credentials**: local MySQL defaults are for development only;
+  production credentials must be supplied via environment variables.
 - **File upload security**: only `.pdf/.xlsx/.xls/.csv/.txt/.tsv` accepted
   (extension check → HTTP 400 otherwise), size limited by
   `spring.servlet.multipart.max-file-size=20MB`, files are parsed in memory and
@@ -1038,8 +1038,8 @@ seat adjustments, exporting to Excel, notifications, and reporting dashboards.
   timetable planning — including scheduling clashes and missing student details.
 - **How does data enter the system?** Through the browser UI (forms and tabs) or
   by uploading PDF/Excel/CSV files for students and exam schedules.
-- **Where is the data stored?** In a SQL database via Spring Data JPA — H2
-  in-memory by default, MySQL/PostgreSQL for production.
+- **Where is the data stored?** In a SQL database via Spring Data JPA — MySQL
+  by default, with H2/PostgreSQL available through configuration.
 - **How is the timetable generated?** `AllocationService` filters students by
   the exam's branch/batch target, interleaves them round-robin across
   `branch·batch` groups, fills each room desk preferring different groups, then

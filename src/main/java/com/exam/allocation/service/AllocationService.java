@@ -1,11 +1,15 @@
 package com.exam.allocation.service;
 
 import com.exam.allocation.model.Exam;
+import com.exam.allocation.model.ExamEligibility;
 import com.exam.allocation.model.Room;
 import com.exam.allocation.model.Seat;
+import com.exam.allocation.model.SeatAllocation;
 import com.exam.allocation.model.Student;
+import com.exam.allocation.repository.ExamEligibilityRepository;
 import com.exam.allocation.repository.ExamRepository;
 import com.exam.allocation.repository.RoomRepository;
+import com.exam.allocation.repository.SeatAllocationRepository;
 import com.exam.allocation.repository.SeatRepository;
 import com.exam.allocation.repository.StudentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +44,12 @@ public class AllocationService {
 
     @Autowired
     private ConflictService conflictService;
+
+    @Autowired
+    private SeatAllocationRepository seatAllocationRepository;
+
+    @Autowired
+    private ExamEligibilityRepository examEligibilityRepository;
 
     /** Result of an allocation run, returned as JSON to the frontend. */
     public static class AllocationResult {
@@ -83,14 +93,24 @@ public class AllocationService {
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid Exam ID"));
 
-        List<Room> rooms = roomRepository.findAllById(roomIds);
+        // Inactive rooms are excluded so a deactivated room is never used again.
+        List<Room> rooms = roomRepository.findAllById(roomIds).stream()
+                .filter(Room::isActive)
+                .collect(Collectors.toList());
         if (rooms.isEmpty()) {
-            result.setMessage("No rooms available for allocation. Add a room first.");
+            result.setMessage("No active rooms available for allocation. Add (or re-activate) a room first.");
             return result;
         }
 
+        // A fresh run replaces the previous chart: drop the stored allocations too.
+        seatAllocationRepository.deleteByExamId(examId);
+        seatAllocationRepository.flush();
+
+        Set<String> eligibleBatches = eligibilityBatches(exam);
+
         List<Student> eligible = studentRepository.findAll().stream()
-                .filter(s -> matchesExam(s, exam))
+                .filter(s -> s.getAccountStatus() == Student.AccountStatus.ACTIVE)
+                .filter(s -> matchesExam(s, exam, eligibleBatches))
                 .collect(Collectors.toList());
         result.setEligibleStudents(eligible.size());
 
@@ -149,15 +169,58 @@ public class AllocationService {
         }
         result.setMessage(msg.toString());
 
-        // Scheduling conflicts: students or rooms booked twice in this time slot.
-        List<Seat> seated = new ArrayList<>();
+        // Store the result as DRAFT seat allocations (visible to students only after publishing).
+        List<Seat> chartSeats = new ArrayList<>();
         for (Room room : rooms) {
-            seated.addAll(seatRepository.findByRoomId(room.getId()).stream()
+            chartSeats.addAll(seatRepository.findByRoomId(room.getId()).stream()
                     .filter(s -> s.getExam() != null && exam.getId().equals(s.getExam().getId()))
                     .collect(Collectors.toList()));
         }
-        result.setConflicts(conflictService.allocationWarnings(exam, seated));
+        for (Seat seat : chartSeats) {
+            if (seat.getAllocatedStudent() == null) continue;
+            seatAllocationRepository.save(new SeatAllocation(
+                    exam, seat.getAllocatedStudent(), roomOf(rooms, seat), seat));
+        }
+        result.setConflicts(conflictService.allocationWarnings(exam, chartSeats));
+        result.setMessage(result.getMessage() + " The chart is a draft - publish it to show seats to students.");
         return result;
+    }
+
+    /** Publishes the stored allocations of an exam (students can then see their seats). */
+    @Transactional
+    public int publishAllocations(Long examId) {
+        Exam exam = examRepository.findById(examId)
+                .orElseThrow(() -> new IllegalArgumentException("Exam not found with id " + examId));
+        if (exam.getStatus() == Exam.ExamStatus.CANCELLED) {
+            throw new IllegalArgumentException("Cancelled exams cannot have published seating. Reopen the exam first.");
+        }
+        List<SeatAllocation> allocations = seatAllocationRepository.findByExamId(examId);
+        for (SeatAllocation allocation : allocations) {
+            allocation.setStatus(SeatAllocation.Status.PUBLISHED);
+        }
+        seatAllocationRepository.saveAll(allocations);
+        return allocations.size();
+    }
+
+    /** Moves published allocations back to draft (hidden from students again). */
+    @Transactional
+    public int unpublishAllocations(Long examId) {
+        List<SeatAllocation> allocations = seatAllocationRepository
+                .findByExamIdAndStatus(examId, SeatAllocation.Status.PUBLISHED);
+        for (SeatAllocation allocation : allocations) {
+            allocation.setStatus(SeatAllocation.Status.DRAFT);
+        }
+        seatAllocationRepository.saveAll(allocations);
+        return allocations.size();
+    }
+
+    /** Batch names the exam is assigned to via exam_eligibility (empty = use legacy branch/course). */
+    public Set<String> eligibilityBatches(Exam exam) {
+        Set<String> batches = new HashSet<>();
+        for (ExamEligibility eligibility : examEligibilityRepository.findByExamId(exam.getId())) {
+            batches.add(eligibility.getBatchName());
+        }
+        return batches;
     }
 
     /**
@@ -269,6 +332,13 @@ public class AllocationService {
         return existing;
     }
 
+    private Room roomOf(List<Room> rooms, Seat seat) {
+        if (seat.getRoom() != null) return seat.getRoom();
+        return rooms.stream()
+                .filter(r -> seat.getRoom() != null && r.getId().equals(seat.getRoom().getId()))
+                .findFirst().orElse(null);
+    }
+
     /** Round-robin one student from each course per pass, until every student is placed. */
     private List<Student> interleave(Map<String, List<Student>> byCourse) {
         List<String> courses = new ArrayList<>(byCourse.keySet());
@@ -292,10 +362,21 @@ public class AllocationService {
         return out;
     }
 
-    /** True when the student belongs to the audience of this exam (branch + batch/course). */
-    private boolean matchesExam(Student student, Exam exam) {
-        return branchMatches(student.getBranch(), exam.getBranch())
-                && courseMatches(student, exam);
+    /**
+     * True when the student belongs to the audience of this exam.
+     * Explicit exam_eligibility rows win; otherwise the legacy branch/batch
+     * columns decide (blank = "all students").
+     */
+    public boolean matchesExam(Student student, Exam exam) {
+        return matchesExam(student, exam, eligibilityBatches(exam));
+    }
+
+    public boolean matchesExam(Student student, Exam exam, Set<String> eligibleBatches) {
+        if (!branchMatches(student.getBranch(), exam.getBranch())) return false;
+        if (eligibleBatches != null && !eligibleBatches.isEmpty()) {
+            return eligibleBatches.contains(student.getBatch()) || eligibleBatches.contains(student.getBranch());
+        }
+        return courseMatches(student, exam);
     }
 
     private boolean branchMatches(String studentBranch, String examBranch) {

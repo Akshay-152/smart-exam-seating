@@ -1,52 +1,72 @@
 package com.exam.allocation.controller;
 
-import com.exam.allocation.model.Exam;
-import com.exam.allocation.model.Room;
-import com.exam.allocation.model.Seat;
-import com.exam.allocation.model.Student;
-import com.exam.allocation.repository.ExamRepository;
-import com.exam.allocation.repository.RoomRepository;
-import com.exam.allocation.repository.SeatRepository;
-import com.exam.allocation.repository.StudentRepository;
+import com.exam.allocation.model.*;
+import com.exam.allocation.repository.*;
 import com.exam.allocation.service.AllocationService;
+import com.exam.allocation.service.AuditService;
+import com.exam.allocation.service.UserAccountService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Administrator endpoints for students, rooms, seating allocation and allocation
+ * publishing. All of these require the {@code ROLE_ADMIN} role (see SecurityConfig).
+ */
 @RestController
 @RequestMapping("/api")
 public class AllocationController {
 
-    @Autowired
-    private StudentRepository studentRepository;
-
-    @Autowired
-    private RoomRepository roomRepository;
-
-    @Autowired
-    private ExamRepository examRepository;
-
-    @Autowired
-    private SeatRepository seatRepository;
-
-    @Autowired
-    private AllocationService allocationService;
+    @Autowired private StudentRepository studentRepository;
+    @Autowired private RoomRepository roomRepository;
+    @Autowired private ExamRepository examRepository;
+    @Autowired private SeatRepository seatRepository;
+    @Autowired private SeatAllocationRepository seatAllocationRepository;
+    @Autowired private ExamRoomRepository examRoomRepository;
+    @Autowired private AllocationService allocationService;
+    @Autowired private UserAccountService userAccountService;
+    @Autowired private AuditService auditService;
 
     // --- Student Endpoints ---
 
+    /** Students, optionally filtered by ?search=, ?branch=, ?batch=, ?status=. */
     @GetMapping("/students")
-    public List<Student> getAllStudents() {
-        return studentRepository.findAll();
+    public List<Student> getAllStudents(@RequestParam(required = false) String search,
+                                        @RequestParam(required = false) String branch,
+                                        @RequestParam(required = false) String batch,
+                                        @RequestParam(required = false) String status) {
+        List<Student> students = studentRepository.findAll();
+        String needle = search == null ? "" : search.trim().toLowerCase();
+        return students.stream()
+                .filter(s -> needle.isEmpty()
+                        || contains(s.getRollNo(), needle) || contains(s.getName(), needle))
+                .filter(s -> branch == null || branch.isBlank() || branch.equalsIgnoreCase(branchOf(s)))
+                .filter(s -> batch == null || batch.isBlank() || batch.equalsIgnoreCase(s.getBatch()))
+                .filter(s -> status == null || status.isBlank()
+                        || status.equalsIgnoreCase(s.getAccountStatus().name()))
+                .sorted(Comparator.comparing(s -> s.getRollNo() == null ? "" : s.getRollNo()))
+                .collect(Collectors.toList());
     }
 
     @PostMapping("/students")
     public Student addStudent(@RequestBody Student student) {
         ensureRollNoFree(student.getRollNo(), null);
-        return studentRepository.save(student);
+        if (student.getAccountStatus() == null) student.setAccountStatus(Student.AccountStatus.ACTIVE);
+        if (student.getDepartment() == null || student.getDepartment().isBlank()) {
+            student.setDepartment(student.getBranch());
+        }
+        Student saved = studentRepository.save(student);
+        // An administrator adding a student automatically enables that student's login.
+        userAccountService.createStudentAccount(saved);
+        auditService.record(actor(), "STUDENT_CREATED", "student:" + saved.getId(),
+                "Roll no " + saved.getRollNo() + " created with a login account.");
+        return saved;
     }
 
     @PutMapping("/students/{id}")
@@ -54,37 +74,91 @@ public class AllocationController {
         Student existing = studentRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Student not found with id " + id));
         ensureRollNoFree(student.getRollNo(), id);
+        String previousRollNo = existing.getRollNo();
         existing.setRollNo(student.getRollNo());
         existing.setName(student.getName());
         existing.setBranch(student.getBranch());
         existing.setBatch(student.getBatch());
-        return studentRepository.save(existing);
+        existing.setDepartment(student.getDepartment());
+        existing.setSemester(student.getSemester());
+        existing.setEmail(student.getEmail());
+        existing.setPhone(student.getPhone());
+        existing.setAccountStatus(student.getAccountStatus() == null
+                ? Student.AccountStatus.ACTIVE : student.getAccountStatus());
+        Student saved = studentRepository.save(existing);
+        if (previousRollNo != null && !previousRollNo.equals(saved.getRollNo())) {
+            userAccountService.deleteAccountFor(previousRollNo);
+        }
+        userAccountService.createStudentAccount(saved);
+        userAccountService.syncStudentStatus(saved);
+        auditService.record(actor(), "STUDENT_UPDATED", "student:" + saved.getId(),
+                "Roll no " + saved.getRollNo() + " updated.");
+        return saved;
     }
 
+    /** Deletes a student together with the login account and any seat references. */
     @DeleteMapping("/students/{id}")
     public Map<String, Object> deleteStudent(@PathVariable Long id) {
-        if (!studentRepository.existsById(id)) {
-            throw new IllegalArgumentException("Student not found with id " + id);
-        }
-        // Clear seat references first so the foreign key does not block deletion.
+        Student student = studentRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Student not found with id " + id));
         List<Seat> seated = seatRepository.findByAllocatedStudentId(id);
         seated.forEach(seat -> seat.setAllocatedStudent(null));
         seatRepository.saveAll(seated);
+        seatAllocationRepository.findByStudentId(id).forEach(seatAllocationRepository::delete);
+        userAccountService.deleteAccountFor(student.getRollNo());
         studentRepository.deleteById(id);
+        auditService.record(actor(), "STUDENT_DELETED", "student:" + id,
+                "Roll no " + student.getRollNo() + " deleted.");
         return Map.of("deleted", true, "clearedSeats", seated.size());
+    }
+
+    /** Administrator password reset for a student. */
+    @PostMapping("/students/{id}/reset-password")
+    public Map<String, Object> resetPassword(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        Student student = studentRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Student not found with id " + id));
+        String newPassword = body.get("password");
+        if (newPassword == null || newPassword.length() < 4) {
+            throw new IllegalArgumentException("The reset password must be at least 4 characters long.");
+        }
+        userAccountService.resetStudentPassword(student.getRollNo(), newPassword);
+        auditService.record(actor(), "STUDENT_PASSWORD_RESET", "student:" + id,
+                "Password reset for roll no " + student.getRollNo() + ".");
+        return Map.of("reset", true, "message", "Password reset. The student signs in with the new password.");
+    }
+
+    /** Enables or disables a student account (a disabled student cannot sign in). */
+    @PostMapping("/students/{id}/status")
+    public Map<String, Object> setStudentStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        Student student = studentRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Student not found with id " + id));
+        String status = body.getOrDefault("status", "");
+        if (!status.equalsIgnoreCase("ACTIVE") && !status.equalsIgnoreCase("INACTIVE")) {
+            throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE.");
+        }
+        student.setAccountStatus(Student.AccountStatus.valueOf(status.toUpperCase()));
+        studentRepository.save(student);
+        userAccountService.syncStudentStatus(student);
+        auditService.record(actor(), "STUDENT_STATUS", "student:" + id,
+                "Roll no " + student.getRollNo() + " set to " + student.getAccountStatus() + ".");
+        return Map.of("status", student.getAccountStatus().name());
     }
 
     // --- Room Endpoints ---
 
     @GetMapping("/rooms")
-    public List<Room> getAllRooms() {
-        return roomRepository.findAll();
+    public List<Room> getAllRooms(@RequestParam(required = false) Boolean active) {
+        List<Room> rooms = roomRepository.findAll();
+        if (active != null) rooms = rooms.stream().filter(r -> r.isActive() == active).collect(Collectors.toList());
+        return rooms;
     }
 
     @PostMapping("/rooms")
     public Room addRoom(@RequestBody Room room) {
         ensureRoomNumberFree(room.getRoomNumber(), null);
-        return roomRepository.save(room);
+        Room saved = roomRepository.save(room);
+        auditService.record(actor(), "ROOM_CREATED", "room:" + saved.getId(), saved.getDisplayName());
+        return saved;
     }
 
     @PutMapping("/rooms/{id}")
@@ -97,7 +171,24 @@ public class AllocationController {
         existing.setRowsCount(room.getRowsCount());
         existing.setColumnsCount(room.getColumnsCount());
         existing.setStudentsPerDesk(room.getStudentsPerDesk());
-        return roomRepository.save(existing);
+        existing.setBuilding(room.getBuilding());
+        existing.setFloor(room.getFloor());
+        existing.setActive(room.isActive());
+        Room saved = roomRepository.save(existing);
+        auditService.record(actor(), "ROOM_UPDATED", "room:" + saved.getId(), saved.getDisplayName());
+        return saved;
+    }
+
+    /** Deactivates (or re-activates) a room; inactive rooms are never used for new allocations. */
+    @PostMapping("/rooms/{id}/status")
+    public Map<String, Object> setRoomStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        Room room = roomRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Room not found with id " + id));
+        boolean active = Boolean.parseBoolean(String.valueOf(body.getOrDefault("active", "true")));
+        room.setActive(active);
+        roomRepository.save(room);
+        auditService.record(actor(), "ROOM_STATUS", "room:" + id, room.getDisplayName() + " -> " + (active ? "ACTIVE" : "INACTIVE"));
+        return Map.of("active", room.isActive());
     }
 
     @DeleteMapping("/rooms/{id}")
@@ -105,8 +196,10 @@ public class AllocationController {
         if (!roomRepository.existsById(id)) {
             throw new IllegalArgumentException("Room not found with id " + id);
         }
+        seatAllocationRepository.deleteByRoomId(id);
         seatRepository.deleteAll(seatRepository.findByRoomId(id));
         roomRepository.deleteById(id);
+        auditService.record(actor(), "ROOM_DELETED", "room:" + id, "Room deleted.");
         return Map.of("deleted", true);
     }
 
@@ -114,12 +207,10 @@ public class AllocationController {
 
     /**
      * Generates the seating chart for an exam.
-     * Body: {"examId": 1} - when omitted, the most recent exam is used.
+     * Body: {@code {"examId": 1, "roomIds": [1,2]}} - roomIds defaults to every active room.
      */
     @PostMapping("/allocate")
-    public AllocationService.AllocationResult generateAllocation(
-            @RequestBody(required = false) Map<String, Object> body) {
-
+    public AllocationService.AllocationResult generateAllocation(@RequestBody(required = false) Map<String, Object> body) {
         Long examId = null;
         if (body != null && body.get("examId") != null) {
             examId = Long.valueOf(String.valueOf(body.get("examId")));
@@ -130,20 +221,71 @@ public class AllocationController {
             if (exams.isEmpty()) {
                 return failure("No exams found. Create an exam first, then generate the chart.");
             }
-            examId = exams.stream()
-                    .max(Comparator.comparing(e -> e.getId()))
-                    .map(e -> e.getId())
-                    .orElse(null);
+            examId = exams.stream().max(Comparator.comparing(Exam::getId)).map(Exam::getId).orElse(null);
         }
 
-        List<Long> roomIds = roomRepository.findAll().stream()
-                .map(r -> r.getId())
-                .collect(Collectors.toList());
+        List<Long> roomIds;
+        if (body != null && body.get("roomIds") instanceof List<?> list && !list.isEmpty()) {
+            roomIds = list.stream().map(v -> Long.valueOf(String.valueOf(v))).collect(Collectors.toList());
+        } else {
+            roomIds = roomRepository.findAll().stream()
+                    .filter(Room::isActive)
+                    .map(Room::getId)
+                    .collect(Collectors.toList());
+        }
         if (roomIds.isEmpty()) {
-            return failure("No rooms available for allocation. Add a room first.");
+            return failure("No active rooms available for allocation. Add a room first.");
         }
 
-        return allocationService.generateAllocation(examId, roomIds);
+        AllocationService.AllocationResult result = allocationService.generateAllocation(examId, roomIds);
+        if (result.isSuccess()) {
+            rememberExamRooms(examId, roomIds);
+            auditService.record(actor(), "ALLOCATION_GENERATED", "exam:" + examId,
+                    result.getAllocated() + " seat(s) allocated (draft).");
+        }
+        return result;
+    }
+
+    /** Publishes a generated chart so students can see their seats. */
+    @PostMapping("/allocations/{examId}/publish")
+    public Map<String, Object> publishAllocations(@PathVariable Long examId) {
+        int published = allocationService.publishAllocations(examId);
+        auditService.record(actor(), "ALLOCATION_PUBLISHED", "exam:" + examId, published + " allocation(s) published.");
+        return Map.of("published", published, "message", "Seating published - " + published + " student(s) can now see their seat.");
+    }
+
+    /** Hides a published chart again (moves allocations back to draft). */
+    @PostMapping("/allocations/{examId}/unpublish")
+    public Map<String, Object> unpublishAllocations(@PathVariable Long examId) {
+        int unpublished = allocationService.unpublishAllocations(examId);
+        auditService.record(actor(), "ALLOCATION_UNPUBLISHED", "exam:" + examId, unpublished + " allocation(s) hidden.");
+        return Map.of("unpublished", unpublished);
+    }
+
+    /** Stored allocations (admin view); filters: examId, studentId, status. */
+    @GetMapping("/allocations")
+    public List<Map<String, Object>> listAllocations(@RequestParam(required = false) Long examId,
+                                                     @RequestParam(required = false) Long studentId,
+                                                     @RequestParam(required = false) String status) {
+        List<SeatAllocation> allocations = examId != null
+                ? seatAllocationRepository.findByExamId(examId)
+                : seatAllocationRepository.findAll();
+        if (studentId != null) {
+            allocations = allocations.stream()
+                    .filter(a -> studentId.equals(a.getStudent().getId()))
+                    .collect(Collectors.toList());
+        }
+        if (status != null && !status.isBlank()) {
+            SeatAllocation.Status wanted = SeatAllocation.Status.valueOf(status.toUpperCase());
+            allocations = allocations.stream().filter(a -> a.getStatus() == wanted).collect(Collectors.toList());
+        }
+        return allocations.stream()
+                .sorted(Comparator.comparing((SeatAllocation a) -> a.getExam().getId())
+                        .thenComparing(a -> a.getRoom().getId())
+                        .thenComparingInt(a -> a.getSeat().getRowNumber())
+                        .thenComparingInt(a -> a.getSeat().getColumnNumber()))
+                .map(this::describe)
+                .collect(Collectors.toList());
     }
 
     // --- Seat / Chart Endpoints ---
@@ -156,12 +298,63 @@ public class AllocationController {
                 : seatRepository.findAll();
         seats.sort(Comparator
                 .comparing((Seat s) -> s.getRoom() == null ? 0L : s.getRoom().getId())
-                .thenComparingInt(s -> s.getRowNumber())
-                .thenComparingInt(s -> s.getColumnNumber()));
+                .thenComparingInt(Seat::getRowNumber)
+                .thenComparingInt(Seat::getColumnNumber));
         return seats;
     }
 
     // --- Helpers ---
+
+    private Map<String, Object> describe(SeatAllocation allocation) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("id", allocation.getId());
+        out.put("examId", allocation.getExam().getId());
+        out.put("examName", allocation.getExam().getSubjectName());
+        out.put("studentId", allocation.getStudent().getId());
+        out.put("rollNo", allocation.getStudent().getRollNo());
+        out.put("name", allocation.getStudent().getName());
+        out.put("roomId", allocation.getRoom().getId());
+        out.put("roomNumber", allocation.getRoom().getRoomNumber());
+        out.put("building", allocation.getRoom().getBuilding());
+        out.put("floor", allocation.getRoom().getFloor());
+        out.put("row", allocation.getSeat().getRowNumber());
+        out.put("column", allocation.getSeat().getColumnNumber());
+        out.put("deskPosition", allocation.getSeat().getDeskPosition());
+        out.put("seatCode", seatCode(allocation.getRoom(), allocation.getSeat()));
+        out.put("status", allocation.getStatus().name());
+        return out;
+    }
+
+    /** Human readable seat identifier, e.g. "R6-A01". */
+    static String seatCode(Room room, Seat seat) {
+        String prefix = room.getRoomNumber() == null ? "R" : ("R" + room.getRoomNumber().replaceAll("[^A-Za-z0-9]", ""));
+        String row = String.valueOf((char) ('A' + seat.getRowNumber() - 1));
+        String col = String.format("%02d", seat.getColumnNumber());
+        String suffix = seat.getDeskPosition() > 1 ? String.valueOf((char) ('a' + seat.getDeskPosition() - 1)) : "";
+        return prefix + "-" + row + col + suffix;
+    }
+
+    private void rememberExamRooms(Long examId, List<Long> roomIds) {
+        Exam exam = examRepository.findById(examId).orElse(null);
+        if (exam == null) return;
+        examRoomRepository.deleteByExamId(examId);
+        for (Room room : roomRepository.findAllById(roomIds)) {
+            examRoomRepository.save(new ExamRoom(exam, room));
+        }
+    }
+
+    private String branchOf(Student student) {
+        return student.getBranch();
+    }
+
+    private boolean contains(String value, String needle) {
+        return value != null && value.toLowerCase().contains(needle);
+    }
+
+    private String actor() {
+        return SecurityContextHolder.getContext().getAuthentication() == null
+                ? "system" : SecurityContextHolder.getContext().getAuthentication().getName();
+    }
 
     private AllocationService.AllocationResult failure(String message) {
         AllocationService.AllocationResult result = new AllocationService.AllocationResult();

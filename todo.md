@@ -86,8 +86,8 @@ Rooms tab.
 
 ## 6. Database  `[x] Completed`
 
-- [x] Connection verified (H2 in-memory by default; MySQL/PostgreSQL drivers +
-      `docker-compose.yml` ready; configuration documented in `database.md`)
+- [x] MySQL configured as the default database; local MySQL 8 available via
+      `docker-compose.yml`, with connection settings documented in `database.md`
 - [x] Entities/models verified: `Student`, `Batch`, `Exam`, `Room`, `Seat` (+ `Admin` stub)
 - [x] Repositories verified (`findByRollNo`, `countByBatch`, `findByExamId`, …)
 - [x] Services verified (allocation, imports, conflicts, batches, PDF)
@@ -95,8 +95,8 @@ Rooms tab.
       referenced by students/exams — see `PROJECT_DETAILS.md` §27)
 - [x] Student, batch/course, exam and timetable data correctly connected
       (verified through the full workflow: import → allocate → PDF)
-- [x] No secrets exposed: H2 dev password is empty, docs show placeholders only,
-      production credentials documented as environment variables
+- [x] Production credentials use environment-variable overrides; local MySQL
+      development credentials are documented and must not be used in production
 
 ## 7. Documentation  `[x] Completed`
 
@@ -109,7 +109,7 @@ Rooms tab.
 
 - [x] Application build: `mvn clean package -DskipTests` → jar produced
 - [x] Backend startup: Spring Boot starts cleanly (port 8081 for tests)
-- [x] Database connection: H2 up, Hibernate DDL, H2 console enabled
+- [x] Database configuration: MySQL default with Hibernate DDL; H2 console is disabled
 - [x] Batch creation/retrieval: defaults A–G seeded; custom `H` add/duplicate/blank/delete-guard
 - [x] Student creation/retrieval/update/delete incl. duplicate-roll rejection
 - [x] Exam PDF upload / Excel upload / CSV upload (extraction + validation + idempotency)

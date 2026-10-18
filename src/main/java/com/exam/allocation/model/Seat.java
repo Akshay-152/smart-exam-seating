@@ -9,7 +9,9 @@ public class Seat {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    // "row_number" is a reserved word on MySQL 8: quote it, otherwise Hibernate's
+    // generated CREATE TABLE fails and the whole seat table is never created.
+    @Column(name = "`row_number`", nullable = false)
     private int rowNumber;
 
     @Column(nullable = false)

@@ -36,6 +36,33 @@ public class Exam {
     /** Application identifier of the exam, e.g. "APP-E-2026-001". */
     private String applicationId;
 
+    /** Subject catalogue code, e.g. "CS301". */
+    private String subjectCode;
+
+    /** End time of the exam; used to compute the duration. */
+    private LocalTime endTime;
+
+    /** Semester the exam is for (1..8). */
+    private Integer semester;
+
+    /** Free-form exam type, e.g. "Regular", "Supplementary", "Internal". */
+    private String examType;
+
+    /** Instructions shown to students on their dashboard and seating slip. */
+    @Column(length = 2000)
+    private String instructions;
+
+    /** Lifecycle state: DRAFT, PUBLISHED, COMPLETED or CANCELLED. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ExamStatus status = ExamStatus.DRAFT;
+
+    public enum ExamStatus { DRAFT, PUBLISHED, COMPLETED, CANCELLED }
+
+    /** Duration in whole minutes, derived from start/end times when both exist. */
+    @Column(name = "duration_minutes")
+    private Integer durationMinutes;
+
     public Exam() {}
 
     // Getters and Setters
@@ -59,4 +86,32 @@ public class Exam {
 
     public String getApplicationId() { return applicationId; }
     public void setApplicationId(String applicationId) { this.applicationId = applicationId; }
+
+    public String getSubjectCode() { return subjectCode; }
+    public void setSubjectCode(String subjectCode) { this.subjectCode = subjectCode; }
+
+    public LocalTime getEndTime() { return endTime; }
+    public void setEndTime(LocalTime endTime) { this.endTime = endTime; this.durationMinutes = deriveDuration(); }
+
+    public Integer getSemester() { return semester; }
+    public void setSemester(Integer semester) { this.semester = semester; }
+
+    public String getExamType() { return examType; }
+    public void setExamType(String examType) { this.examType = examType; }
+
+    public String getInstructions() { return instructions; }
+    public void setInstructions(String instructions) { this.instructions = instructions; }
+
+    public ExamStatus getStatus() { return status; }
+    public void setStatus(ExamStatus status) { this.status = status; }
+
+    public Integer getDurationMinutes() { return durationMinutes != null ? durationMinutes : deriveDuration(); }
+    public void setDurationMinutes(Integer durationMinutes) { this.durationMinutes = durationMinutes; }
+
+    /** Recomputed whenever the start or end time changes; null when unknown. */
+    private Integer deriveDuration() {
+        if (examTime == null || endTime == null) return durationMinutes;
+        int minutes = (int) java.time.Duration.between(examTime, endTime).toMinutes();
+        return minutes > 0 ? minutes : durationMinutes;
+    }
 }
