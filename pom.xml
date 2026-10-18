@@ -15,6 +15,10 @@
 	<description>Exam Room and Seat Allocation Management System</description>
 	<properties>
 		<java.version>17</java.version>
+		<!-- Spring Boot 3.2.0 manages Mockito 5.7 / Byte Buddy 1.14, which reject
+		     Java 25 (class file 69). These versions officially support Java 25. -->
+		<mockito.version>5.24.0</mockito.version>
+		<byte-buddy.version>1.17.7</byte-buddy.version>
 	</properties>
 	<dependencies>
 		<dependency>

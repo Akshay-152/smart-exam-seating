@@ -14,4 +14,8 @@ public interface ExamRoomRepository extends JpaRepository<ExamRoom, Long> {
     List<ExamRoom> findByRoomId(Long roomId);
     @Transactional
     void deleteByExamId(Long examId);
+
+    /** Clears the exam↔room references so a room can be deleted after it was used in an allocation. */
+    @Transactional
+    void deleteByRoomId(Long roomId);
 }

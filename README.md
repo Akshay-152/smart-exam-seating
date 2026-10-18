@@ -29,12 +29,27 @@ PDF that includes the student list with Roll Number, Name, Branch and Batch.
   Room | Seat.
 - **Single-page admin UI** — Dashboard, Students, Rooms, Courses, Exams,
   Seating Chart and Import tabs.
+- **Authentication & roles** — server-side login for the administrator and for
+  every student (roll number as initial password, password change required on
+  first login, BCrypt hashes), session cookies, CSRF protection, login rate
+  limiting and an audit trail of admin actions. Students can only read their
+  own records; every admin API rejects student sessions.
+- **Room management** — optional room **name** (dash shown when empty),
+  building/floor, live **search** by number/name/building, an availability
+  **Select** checkbox persisted in MySQL and enforced by the allocator
+  (inactive rooms are never used for new charts), plus a **room picker** on the
+  Seating Chart tab that shows total selected capacity and warns when it is
+  short of the eligible-student count.
+- **Responsive, mobile-first UI** — fluid add/edit form grid (6 → 3 → 2 → 1
+  columns), tab strip that scrolls inside its own container, tables wrapped in
+  dedicated scroll areas and touch-friendly controls: verified with **no
+  page-level horizontal overflow at 1920/1366/1024/768/390/320 px**.
 
 ## Technology
 
 | Layer     | Technology |
 |-----------|------------|
-| Backend   | Java 17+, Spring Boot 3.2 (Web, Data JPA) |
+| Backend   | Java 17+ (tested on Java 25), Spring Boot 3.2 (Web, Data JPA, Security) |
 | Database  | MySQL 8 by default (Docker Compose); MySQL/PostgreSQL drivers included |
 | PDF       | Apache PDFBox 2.0.31 (generation **and** text extraction for import) |
 | Excel     | Apache POI 5.2.5 |
@@ -50,12 +65,24 @@ PDF that includes the student list with Roll Number, Name, Branch and Batch.
 #2. Start MySQL
 docker compose up -d
 
-#3. Start the app (port 8080 by default; DB defaults match docker-compose.yml)
+#3. (Optional) configure via environment variables
+#    copy .env.example to .env and edit; without it the docker-compose defaults are used
+cp .env.example .env
+
+#4. Start the app (port 8080 by default; DB defaults match docker-compose.yml)
 java -jar target/room-allocation-system-0.0.1-SNAPSHOT.jar
 
-#4. Open the UI
+#5. Open the UI and sign in
 #    http://localhost:8080
+#    Administrator: admin / admin      (development-only default)
+#    Student:       roll number as both username and password
 ```
+
+Credentials, database name and the admin seed account are all configurable
+through the environment variables listed in `.env.example` (`DB_URL`,
+`DB_USERNAME`, `DB_PASSWORD`, `APP_ADMIN_USERNAME`, `APP_ADMIN_PASSWORD`).
+Serve the app over HTTPS in production and change the demo admin password
+before deployment.
 
 Connect MySQL Workbench to `127.0.0.1:3306` with username `root` and local
 development password `Akshay@6235`; refresh Schemas to browse `room_allocation_db`
@@ -75,12 +102,20 @@ to override its MySQL connection settings. See `database.md` for details.
 ## Tests
 
 ```bash
+# Unit tests (JUnit + Mockito — runs on Java 25; Byte Buddy / Mockito are
+# pinned in pom.xml to versions that support class-file version 69)
+./.mvn-tool/apache-maven-3.9.9/bin/mvn test
+
 # Seed baseline data (app must be running on :8081)
 bash tools/test/seed.sh http://localhost:8081/api
 
-# End-to-end UI test through Chrome DevTools Protocol
+# End-to-end UI suite through Chrome DevTools Protocol (signs in as admin first)
 # (start Chrome first: chrome.exe --headless=new --remote-debugging-port=9333 --user-data-dir=%TEMP%/chrome-test http://localhost:8081/)
 node tools/test/cdp-test.mjs
+
+# Rooms + responsiveness suite (app on :8080): room name/search/Select,
+# allocation room picker, and horizontal-overflow sweep at 1920→320px
+node tools/test/responsive-test.mjs
 ```
 
 Fixture generators live next to the tests: `make_xlsx.py`, `make_exam_xlsx.py`,

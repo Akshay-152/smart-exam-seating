@@ -6,8 +6,11 @@ This file replaces the original requirement list with the actual implementation
 status; each section below restates its requirement and what was built.
 
 Last verified: build `room-allocation-system-0.0.1-SNAPSHOT.jar` — application
-starts, full API test pass + `tools/test/cdp-test.mjs` **ALL UI TESTS PASSED**
-(39 checks, no page errors).
+starts, `mvn test` green **on Java 25** (Mockito 5.24 / Byte Buddy 1.17.7 pinned
+in `pom.xml`), `tools/test/cdp-test.mjs` **ALL UI TESTS PASSED** (40 checks,
+including admin login, no page errors) and `tools/test/responsive-test.mjs`
+**ALL RESPONSIVE TESTS PASSED** (rooms name/search/Select, allocation room
+picker, zero page-level horizontal overflow at 1920/1366/1024/768/390/320px).
 
 Update 2026-10-15: the room import form moved from the **Rooms** tab to the
 **Import Data → Rooms** tab (all file uploads now live on the Import Data
@@ -123,15 +126,19 @@ Rooms tab.
 - [x] Room file import (PDF/Excel/CSV) works from its new home, the
       **Import Data → Rooms** tab: upload → counts/preview shown → rooms appear
       on the Rooms tab (CSV fixture, `2 new / 0 invalid`)
+- [x] Room management extras (to add.md): optional **Room Name** column/field,
+      live **search** by number/name/building, availability **Select** checkbox
+      persisted via `POST /api/rooms/{id}/status`, allocation **room picker**
+      with total-capacity warning, and `roomIds` honored (inactive rooms
+      filtered server-side) — all covered by `tools/test/responsive-test.mjs`
+- [x] Authentication & admin/student login (role-based dashboards, BCrypt
+      passwords, forced student password change, sessions, CSRF, rate limiting,
+      audit log) — verified end to end in `things done.md` and both UI suites
 
 ## Remaining / not part of the requirements  `[ ] Pending`
 
-- [ ] Authentication & admin login (`Admin` entity is a Planned stub —
-      **not required** by this requirement list, no auth was requested)
-- [ ] JUnit unit-test coverage beyond the end-to-end suite in `tools/test/` —
-      `src/test/.../RoomImportServiceTest.java` exists but currently **errors on
-      Java 25** (Mockito inline mock maker cannot instrument `FileTableReader`);
-      it is unrelated to the UI changes above and needs a Mockito/byte-buddy
-      upgrade to run again
+- [x] JUnit unit test runs again on Java 25 — `mvn test` is green (Mockito and
+      Byte Buddy upgraded via `mockito.version` / `byte-buddy.version` in
+      `pom.xml`)
 
 No requirement from this list is left unimplemented.

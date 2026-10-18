@@ -2,3 +2,9 @@ target/
 .mvn-tool/
 tools/test/chrome-profile/
 tools/test/*.log
+
+# local environment & scratch files
+.env
+*.log
+cj.txt
+ck.txt

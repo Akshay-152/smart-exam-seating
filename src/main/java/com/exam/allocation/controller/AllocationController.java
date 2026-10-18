@@ -167,6 +167,7 @@ public class AllocationController {
                 .orElseThrow(() -> new IllegalArgumentException("Room not found with id " + id));
         ensureRoomNumberFree(room.getRoomNumber(), id);
         existing.setRoomNumber(room.getRoomNumber());
+        existing.setName(room.getName());
         existing.setCapacity(room.getCapacity());
         existing.setRowsCount(room.getRowsCount());
         existing.setColumnsCount(room.getColumnsCount());
@@ -196,10 +197,12 @@ public class AllocationController {
         if (!roomRepository.existsById(id)) {
             throw new IllegalArgumentException("Room not found with id " + id);
         }
+        examRoomRepository.deleteByRoomId(id);
         seatAllocationRepository.deleteByRoomId(id);
         seatRepository.deleteAll(seatRepository.findByRoomId(id));
+        // All allocations under this room are now abandoned (explicit row deletion, not orphaned).
         roomRepository.deleteById(id);
-        auditService.record(actor(), "ROOM_DELETED", "room:" + id, "Room deleted.");
+        auditService.record(actor(), "ROOM_DELETED", "room:" + id, "Room deleted; allocations/seats cleared.");
         return Map.of("deleted", true);
     }
 
@@ -226,7 +229,16 @@ public class AllocationController {
 
         List<Long> roomIds;
         if (body != null && body.get("roomIds") instanceof List<?> list && !list.isEmpty()) {
-            roomIds = list.stream().map(v -> Long.valueOf(String.valueOf(v))).collect(Collectors.toList());
+            List<Long> requested = list.stream().map(v -> Long.valueOf(String.valueOf(v))).collect(Collectors.toList());
+            // Only rooms that are marked available may be used for a new allocation.
+            java.util.Set<Long> activeIds = roomRepository.findAll().stream()
+                    .filter(Room::isActive)
+                    .map(Room::getId)
+                    .collect(Collectors.toSet());
+            roomIds = requested.stream().filter(activeIds::contains).collect(Collectors.toList());
+            if (roomIds.isEmpty()) {
+                return failure("None of the selected rooms are available for allocation. Activate rooms in Room Management first.");
+            }
         } else {
             roomIds = roomRepository.findAll().stream()
                     .filter(Room::isActive)
@@ -252,6 +264,14 @@ public class AllocationController {
         int published = allocationService.publishAllocations(examId);
         auditService.record(actor(), "ALLOCATION_PUBLISHED", "exam:" + examId, published + " allocation(s) published.");
         return Map.of("published", published, "message", "Seating published - " + published + " student(s) can now see their seat.");
+    }
+
+    /** Moves published allocations back to draft (hidden from students again). */
+    @PostMapping("/allocations/{examId}/unpublish")
+    public Map<String, Object> unpublishAllocations(@PathVariable Long examId) {
+        int unpublished = allocationService.unpublishAllocations(examId);
+        auditService.record(actor(), "ALLOCATION_UNPUBLISHED", "exam:" + examId, unpublished + " allocation(s) hidden.");
+        return Map.of("unpublished", unpublished);
     }
 
     /** Hides a published chart again (moves allocations back to draft). */
@@ -299,7 +319,8 @@ public class AllocationController {
         seats.sort(Comparator
                 .comparing((Seat s) -> s.getRoom() == null ? 0L : s.getRoom().getId())
                 .thenComparingInt(Seat::getRowNumber)
-                .thenComparingInt(Seat::getColumnNumber));
+                .thenComparingInt(Seat::getColumnNumber)
+                .thenComparingInt(Seat::getDeskPosition));
         return seats;
     }
 

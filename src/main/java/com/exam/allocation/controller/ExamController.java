@@ -40,6 +40,7 @@ public class ExamController {
 
     @GetMapping
     public List<Exam> getAllExams(@RequestParam(required = false) String status) {
+        if (!isAdmin()) throw new javax.security.auth.login.AccountException("Admin access required.");
         List<Exam> exams = examRepository.findAll();
         if (status != null && !status.isBlank()) {
             Exam.ExamStatus wanted = Exam.ExamStatus.valueOf(status.toUpperCase());
@@ -56,6 +57,13 @@ public class ExamController {
 
     @GetMapping("/{id}")
     public Exam getExam(@PathVariable Long id) {
+        if (!isAdmin()) throw new javax.security.auth.login.AccountException("Admin access required.");
+        return examRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Exam not found with id " + id));
+    }
+
+    @PostMapping
+    public Exam addExam(@RequestBody Exam exam) {
         return examRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Exam not found with id " + id));
     }
@@ -70,6 +78,8 @@ public class ExamController {
 
     @PutMapping("/{id}")
     public Exam updateExam(@PathVariable Long id, @RequestBody Exam exam) {
+        if (!isAdmin()) throw new javax.security.auth.login.AccountException("Admin access required.");
+        Exam existing = examRepository.findById(id)
         Exam existing = examRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Exam not found with id " + id));
         existing.setSubjectName(exam.getSubjectName());
@@ -98,6 +108,8 @@ public class ExamController {
     /** Lifecycle: DRAFT -> PUBLISHED -> COMPLETED, with CANCELLED reachable from any state. */
     @PostMapping("/{id}/status")
     public Exam setExamStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        if (!isAdmin()) throw new javax.security.auth.login.AccountException("Admin access required.");
+        Exam exam = examRepository.findById(id)
         Exam exam = examRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Exam not found with id " + id));
         String wanted = body.getOrDefault("status", "").toUpperCase();
@@ -142,12 +154,19 @@ public class ExamController {
 
     @GetMapping("/{id}/eligibility")
     public List<String> getEligibility(@PathVariable Long id) {
+        if (!isAdmin()) throw new javax.security.auth.login.AccountException("Admin access required.");
+        return eligibilityRepository.findByExamId(id).stream().map(ExamEligibility::getBatchName).toList();
+    }
+
+    @DeleteMapping("/{id}")
+    public Map<String, Object> deleteExam(@PathVariable Long id) {
         return eligibilityRepository.findByExamId(id).stream().map(ExamEligibility::getBatchName).toList();
     }
 
     /** Only draft or cancelled exams can be deleted (published ones must be cancelled first). */
     @DeleteMapping("/{id}")
     public Map<String, Object> deleteExam(@PathVariable Long id) {
+        if (!isAdmin()) throw new javax.security.auth.login.AccountException("Admin access required.");
         Exam exam = examRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Exam not found with id " + id));
         if (exam.getStatus() == Exam.ExamStatus.PUBLISHED) {
@@ -165,6 +184,12 @@ public class ExamController {
     private String label(Exam exam) {
         return (exam.getSubjectName() == null ? "exam" : exam.getSubjectName())
                 + (exam.getExamDate() == null ? "" : " on " + exam.getExamDate());
+    }
+
+    private boolean isAdmin() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        return auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
     }
 
     private String actor() {

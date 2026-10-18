@@ -170,16 +170,26 @@ public class AllocationService {
         result.setMessage(msg.toString());
 
         // Store the result as DRAFT seat allocations (visible to students only after publishing).
+        // Build the seat-allocation records. The unique constraint on
+        // (exam_id, seat_id) is enforced here as a safety net too: if two students
+        // somehow reached the same seat in one run, only the first write succeeds and
+        // the second candidate is released back into the queue.
         List<Seat> chartSeats = new ArrayList<>();
         for (Room room : rooms) {
             chartSeats.addAll(seatRepository.findByRoomId(room.getId()).stream()
                     .filter(s -> s.getExam() != null && exam.getId().equals(s.getExam().getId()))
                     .collect(Collectors.toList()));
         }
+        Set<Seat> assignedSeats = new HashSet<>();
         for (Seat seat : chartSeats) {
             if (seat.getAllocatedStudent() == null) continue;
+            if (assignedSeats.contains(seat)) {
+                seat.setAllocatedStudent(null);   // seat already claimed - release the student
+                continue;
+            }
             seatAllocationRepository.save(new SeatAllocation(
                     exam, seat.getAllocatedStudent(), roomOf(rooms, seat), seat));
+            assignedSeats.add(seat);
         }
         result.setConflicts(conflictService.allocationWarnings(exam, chartSeats));
         result.setMessage(result.getMessage() + " The chart is a draft - publish it to show seats to students.");

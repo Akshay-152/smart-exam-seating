@@ -28,6 +28,9 @@ public class Room {
     /** How many students share one desk/bench (exam desks often seat 2). */
     private int studentsPerDesk = 1;
 
+    /** Optional friendly name, e.g. "Computer Lab" or "Seminar Room" (blank = show the room number). */
+    private String name;
+
     /** Building the room is in, e.g. "Block A". */
     private String building;
 
@@ -69,6 +72,9 @@ public class Room {
         this.studentsPerDesk = studentsPerDesk < 1 ? 1 : studentsPerDesk;
     }
 
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
     public String getBuilding() { return building; }
     public void setBuilding(String building) { this.building = building; }
 
@@ -80,7 +86,13 @@ public class Room {
 
     /** Human readable name used in charts and seating slips, e.g. "Room 6, Block A, Floor 1". */
     public String getDisplayName() {
-        StringBuilder sb = new StringBuilder(roomNumber == null ? "Room" : roomNumber);
+        StringBuilder sb = new StringBuilder();
+        if (name != null && !name.isBlank()) {
+            sb.append(name.trim());
+            if (roomNumber != null) sb.append(" (").append(roomNumber).append(")");
+        } else {
+            sb.append(roomNumber == null ? "Room" : roomNumber);
+        }
         if (building != null && !building.isBlank()) sb.append(", ").append(building.trim());
         if (floor != null) sb.append(", Floor ").append(floor);
         return sb.toString();
