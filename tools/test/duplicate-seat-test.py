@@ -1,246 +1,200 @@
 #!/usr/bin/env python3
-# Duplicate-seat guarantee test end-to-end.
-#   1) create a dedicated exam (small audience),
-#   2) create a dedicated room,
-#   3) generate the chart,
-#   4) fetch /api/allocations and /api/seats and assert: no two
-#      SeatAllocation rows share the same (exam_id, seat_id), and no two
-#      students are assigned to the same seat on the same exam.
-import json, os, sys, time, subprocess, urllib.request, urllib.parse, urllib.error
+"""End-to-end duplicate-seat guarantee test.
 
-APP = os.environ.get("APP_URL", "http://localhost:8080")
-SESSION = {}
-LOGIN_ENDPOINT = f"{APP}/api/auth/login"
-CSRF_ENDPOINT = f"{APP}/api/auth/csrf"
-ALLOCATIONS_ENDPOINT = f"{APP}/api/allocations"
-SEATS_ENDPOINT = f"{APP}/api/seats"
+Creates two dedicated students, one dedicated exam and one dedicated room
+through the real HTTP API, generates the chart, then asserts:
 
-class _NoData:
-    pass
-def _req(url, method="GET", body=None, headers=None):
-    data = None
-    if body is not None:
-        data = json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(url, data=data, method=method)
-    for k, v in (headers or {}).items():
-        req.add_header(k, v)
+  * no two SeatAllocation rows share the same seat in one exam,
+  * no student is allocated twice in the same exam,
+  * every allocation points at the room that was selected,
+  * allocations never exceed the room capacity,
+  * every allocated seat belongs to this exam.
+
+All test data is removed again in a ``finally`` block, so the database is left
+as it was found. Exits non-zero when any check fails.
+
+Usage:  python tools/test/duplicate-seat-test.py [http://localhost:8080]
+        APP_URL=http://localhost:8081 python tools/test/duplicate-seat-test.py
+"""
+import http.cookiejar
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+BASE = os.environ.get("APP_URL", "http://localhost:8080").rstrip("/")
+jar = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+
+token = None
+failures = []
+
+
+def call(method, path, payload=None, csrf=True):
+    """Call the API, returning (status, parsed JSON or None)."""
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = urllib.request.Request(BASE + path, data=data, method=method)
+    if data is not None:
+        request.add_header("Content-Type", "application/json")
+    if csrf and token:
+        request.add_header("X-XSRF-TOKEN", str(token))
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            code = r.status
-            raw = r.read().decode("utf-8")
-            return code, json.loads(raw) if raw else None, raw
-    except urllib.error.HTTPError as e:
-        _body = e.read().decode("utf-8")
+        with opener.open(request, timeout=30) as response:
+            raw = response.read().decode("utf-8")
+            return response.status, (json.loads(raw) if raw else None)
+    except urllib.error.HTTPError as error:
+        raw = error.read().decode("utf-8")
         try:
-            j = json.loads(_body)
-        except Exception:
-            j = _NoData
-        return e.code, j, _body
-
-def login():
-    code, data, raw = _req(LOGIN_ENDPOINT, "POST",
-                            {"username": "admin", "password": "admin"},
-                            {"Content-Type": "application/json"})
-    if not isinstance(data, dict) or data.get("role") != "ADMIN":
-        print(f"[FAIL] login: HTTP {code} {data}"); sys.exit(1)
-    _, data, _ = _req(CSRF_ENDPOINT)
-    SESSION["token"] = data.get("token", "")
-    SESSION["csrf"] = SESSION["token"]
-    return SESSION["token"]
+            return error.code, (json.loads(raw) if raw else None)
+        except ValueError:
+            return error.code, {"raw": raw}
 
 
-
-def _header(token):
-    return {"X-XSRF-TOKEN": token}
-
-
-def post(path, body):
-    code, data_raw, raw = _req(path, "POST", body,
-                              {"Content-Type": "application/json",
-                               "X-XSRF-TOKEN": SESSION["token"]})
-    if data_raw is None or not isinstance(data_raw, dict):
-        data = {"message": str(data_raw) if data_raw else "no-data", "raw": raw[:400]}
-    else:
-        data = data_raw
-    return code, data
+def check(ok, label, detail=""):
+    print(("[PASS] " if ok else "[FAIL] ") + label + ((" - " + str(detail)) if detail else ""))
+    if not ok:
+        failures.append(label)
 
 
-def get(path, params=None):
-    url = path
-    if params:
-        url += "?" + urllib.parse.urlencode(params)
-    code, data_raw, raw = _req(url)
-    if data_raw is None:
-        data = {"message": "no-data", "raw": raw[:200]}
-    elif not isinstance(data_raw, dict):
-        data = {"message": str(data_raw), "raw": raw[:200]}
-    else:
-        data = data_raw
-    return code, data
+def main():
+    global token
+
+    print("=== duplicate-seat guarantee test (self-contained) ===\n")
+
+    status, body = call("POST", "/api/auth/login",
+                        {"username": "admin", "password": "admin"}, csrf=False)
+    check(status == 200 and isinstance(body, dict) and body.get("role") == "ADMIN",
+          "admin login", body)
+    if failures:
+        return 1
+
+    status, body = call("GET", "/api/auth/csrf")
+    token = (body or {}).get("token") if isinstance(body, dict) else None
+    check(status == 200 and bool(token), "CSRF token issued")
+    if failures:
+        return 1
+
+    stamp = str(int(time.time()))
+    tag = "QA" + stamp[-6:]
+    created = {"students": [], "exam": None, "room": None}
+
+    try:
+        # 1) Two dedicated active students in a unique branch/batch.
+        for number in (1, 2):
+            roll = f"{tag}{number}"
+            status, body = call("POST", "/api/students", {
+                "rollNo": roll,
+                "name": f"QA Student {number}",
+                "branch": "QA",
+                "batch": tag,
+            })
+            check(status in (200, 201) and isinstance(body, dict) and body.get("id"),
+                  f"student {roll} created", body)
+            if isinstance(body, dict) and body.get("id"):
+                created["students"].append(body["id"])
+
+        # 2) Dedicated exam targeting exactly those students.
+        status, body = call("POST", "/api/exams", {
+            "subjectName": f"Duplicate Seat {stamp}",
+            "branch": "QA",
+            "course": tag,
+            "examDate": "2027-01-01",
+            "examTime": "09:00",
+            "endTime": "10:00",
+        })
+        check(status in (200, 201) and isinstance(body, dict) and body.get("id"),
+              "exam created as draft", body)
+        if not (isinstance(body, dict) and body.get("id")):
+            return 1
+        exam_id = body["id"]
+        created["exam"] = exam_id
+        check(body.get("status") == "DRAFT", "new exam starts as DRAFT", body.get("status"))
+
+        # 3) Dedicated room: 2 x 2 desks, 2 students per desk = 8 seats.
+        rows, columns, per_desk = 2, 2, 2
+        capacity = rows * columns * per_desk
+        status, body = call("POST", "/api/rooms", {
+            "roomNumber": f"QA-{stamp}",
+            "name": "QA Room",
+            "rowsCount": rows,
+            "columnsCount": columns,
+            "studentsPerDesk": per_desk,
+            "capacity": capacity,
+            "active": True,
+        })
+        check(status in (200, 201) and isinstance(body, dict) and body.get("id"),
+              "room created", body)
+        if not (isinstance(body, dict) and body.get("id")):
+            return 1
+        room_id = body["id"]
+        created["room"] = room_id
+
+        # 4) Generate the chart for this exam and this room only.
+        status, body = call("POST", "/api/allocate",
+                            {"examId": exam_id, "roomIds": [room_id]})
+        check(status == 200 and isinstance(body, dict) and body.get("success"),
+              "allocation generated", body)
+        if isinstance(body, dict):
+            check(body.get("allocated") == 2, "both students seated", body.get("allocated"))
+
+        # 5) Read the stored allocations back.
+        status, allocations = call("GET", f"/api/allocations?examId={exam_id}")
+        check(status == 200 and isinstance(allocations, list),
+              "GET /api/allocations", status)
+        exam_rows = [a for a in allocations if a.get("examId") == exam_id] \
+            if isinstance(allocations, list) else []
+
+        check(len(exam_rows) == 2, "two allocations stored for the exam", len(exam_rows))
+        check(all(a.get("roomId") == room_id for a in exam_rows),
+              "all allocations use the selected room")
+        check(len({a.get("seatCode") for a in exam_rows}) == len(exam_rows),
+              "no two allocations share a seat", [a.get("seatCode") for a in exam_rows])
+        check(len({a.get("studentId") for a in exam_rows}) == len(exam_rows),
+              "no student is allocated twice")
+        check(len(exam_rows) <= capacity, "allocations within room capacity",
+              f"{len(exam_rows)} <= {capacity}")
+
+        # 6) Every allocation must reference a real seat of this exam.
+        status, seats = call("GET", f"/api/seats?examId={exam_id}")
+        check(status == 200 and isinstance(seats, list), "GET /api/seats", status)
+        seat_rows = seats if isinstance(seats, list) else []
+        seats_for_room = [s for s in seat_rows
+                          if isinstance(s.get("room"), dict) and s["room"].get("id") == room_id]
+        check(len(seats_for_room) == capacity,
+              "room grid has one seat per position", len(seats_for_room))
+
+        # /api/allocations exposes row/column/deskPosition/seatCode (not seatId),
+        # so match each allocation to a seat by its physical coordinates.
+        seat_keys = {(s.get("room", {}).get("id"), s.get("rowNumber"),
+                      s.get("columnNumber"), s.get("deskPosition"))
+                     for s in seat_rows if isinstance(s.get("room"), dict)}
+        allocation_keys = {(a.get("roomId"), a.get("row"),
+                            a.get("column"), a.get("deskPosition")) for a in exam_rows}
+        check(allocation_keys <= seat_keys,
+              "every allocation references a seat of this exam",
+              sorted(allocation_keys - seat_keys))
+        allocated_seats = [s for s in seat_rows if s.get("allocatedStudent")]
+        check(len(allocated_seats) == len(exam_rows),
+              "seats and allocations agree", f"{len(allocated_seats)} vs {len(exam_rows)}")
+    finally:
+        # Best-effort cleanup: only the records this test created.
+        if created["exam"]:
+            call("DELETE", f"/api/exams/{created['exam']}")
+        if created["room"]:
+            call("DELETE", f"/api/rooms/{created['room']}")
+        for student_id in created["students"]:
+            call("DELETE", f"/api/students/{student_id}")
+
+    print()
+    if failures:
+        print(f"FAILED: {len(failures)} check(s): {', '.join(failures)}")
+        return 1
+    print("=== PASS: no duplicate seats ===")
+    return 0
 
 
-def _header(token):
-    """Return X-XSRF-TOKEN header with the given token value."""
-    return {"X-XSRF-TOKEN": token if isinstance(token, str) else token.get("token", "")}
-
-
-def post(path, body):
-    code, data_raw, raw = _req(path, "POST", body,
-                              {"Content-Type": "application/json",
-                               "X-XSRF-TOKEN": SESSION["token"]})
-    if data_raw is None or not isinstance(data_raw, dict):
-        data = {"message": str(data_raw), "raw": raw[:400]}
-    else:
-        data = data_raw
-    return code, data
-
-
-def _header(token):
-    """Return X-XSRF-TOKEN header with the given token value."""
-    return {"X-XSRF-TOKEN": token["token"] if isinstance(token, dict) else token};
-    code, data_raw, raw = _req(path, "POST", body,
-                              {"Content-Type": "application/json",
-                               "X-XSRF-TOKEN": SESSION["token"]})
-    if data_raw is None or not isinstance(data_raw, dict):
-        data = {"message": str(data_raw) if data_raw else "no-data", "raw": raw[:400]}
-    else:
-        data = data_raw
-    return code, data
-
-
-def get(path, params=None):
-    url = path
-    if params:
-        url += "?" + urllib.parse.urlencode(params)
-    code, (data, raw) = _req(url)
-    return code, data
-
-def mk_exam(session, subject, branch, course, examDate, examTime):
-    code, data = post(f"{APP}/api/exams", {
-        "subjectName": subject, "branch": branch, "course": course,
-        "examDate": examDate, "examTime": examTime,
-    })
-    return code, data
-
-
-def exam_create(subject, branch, course, examDate, examTime):
-    return mk_exam(SESSION, subject, branch, course, examDate, examTime)
-
-def mk_room(session, roomNumber, names, studentsPerDesk, rows, cols):
-    # We never want to duplicate a roomNumber; use the exam id to keep it unique.
-    code, data = post(f"{APP}/api/rooms", {
-        "roomNumber": f"QL-{session['exam_id']}-{names}",
-        "studentsPerDesk": studentsPerDesk,
-        "rowsCount": rows, "columnsCount": cols,
-        "capacity": rows * cols * studentsPerDesk,
-        "active": True,
-    })
-    return data
-
-def generate(session, roomid, examid):
-    code, data = post(f"{APP}/api/allocate", {"roomIds": [roomid], "examId": examid})
-    return code, data
-
-
-def get(url):
-    code, data_raw, raw = _req(url)
-    data = data_raw if isinstance(data_raw, dict) else None
-    return code, data
-
-
-def get_with_params(path, params):
-    url = path + "?" + urllib.parse.urlencode(params)
-    return get(url)
-
-# ---- harness ----
-sessions = {}
-print("=== duplicate-seat guarantee test (two students, one exam, one room) ===\n")
-
-# 1) Login
-tkn = login()
-SESSION["csrf"] = tkn
-print(f"login ok, csrf token fetched")
-
-# 2) Create a dedicated exam with a known, small eligibility audience    exam = mk_exam(SESSION, "Duplicate-Seat Guarantee Exam", "CS", "CS", "2027-01-01", "09:00")
-print(f"exam created: {exam}")
-if 'id' not in exam:
-    print("[FAIL] exam creation returned no id - inspect the raw response above")
-    sys.exit(1)
-session["exam_id"] = exam["id"]
-exam_id = exam["id"]
-
-# 3) Create a dedicated room
-room = mk_room(SESSION, "101", 10, 2, 2)
-print(f"room created: {room}")
-room_id = room["id"]
-
-# 4) Generate the chart
-code, data = generate(SESSION, room_id, exam_id)
-print(f"allocation generated: HTTP {code} {data}")
-
-# 5) Query the allocations
-code, allocations = get(ALLOCATIONS_ENDPOINT, {"examId": exam_id})
-if code != 200:
-    print(f"[FAIL] GET /api/allocations: HTTP {code}"); sys.exit(1)
-
-rows = allocations or []
-print(f"\n{f'allocations':{18}}: {len(rows)}")
-# Make sure we have the right exam and room data
-exam_alloc = [a for a in rows if a.get("examId") == exam_id]
-seat_ids = [a.get("seatId") for a in exam_alloc]
-student_ids = [a.get("studentId") for a in exam_alloc]
-
-# 6) Query the seats
-code, seats = get(SEATS_ENDPOINT, {"examId": exam_id})
-if code != 200:
-    print(f"[FAIL] GET /api/seats: HTTP {code}"); sys.exit(1)
-
-seat_rows = seats or []
-print(f"{'seats fetched':{18}}: {len(seat_rows)}")
-
-# 7) Check: no two allocations share the same seat_id for the same exam
-dup_by_seat = {}
-for a in exam_alloc:
-    sid = a.get("seatId")
-    if sid not in dup_by_seat:
-        dup_by_seat[sid] = a.get("studentId")
-    else:
-        prev = dup_by_seat[sid]
-        print(f"[FAIL] duplicate seat {sid}: {prev} and {a.get('studentId')} both on exam {exam_id}")
-        sys.exit(1)
-
-# 8) Check: no two allocations share the same student+seat+exam
-seen = set()
-for a in exam_alloc:
-    key = (a.get("examId"), a.get("studentId"), a.get("seatId"))
-    if key in seen:
-        print(f"[FAIL] duplicate (exam, student, seat): {key}")
-        sys.exit(1)
-    seen.add(key)
-
-# 9) Check: if a room holds N desks and each desk seats 1, at most N students
-room_rows = [r for r in room_rows if r.get("roomId") == room_id]
-if room_rows:
-    r = room_rows[0]
-else:
-    r = {"rowsCount": rows, "columnsCount": cols, "studentsPerDesk": studentsPerDesk}
-capacity = r["rowsCount"] * r["columnsCount"] * r["studentsPerDesk"]
-SeatAllocation_rows = [a for a in exam_alloc if a.get("roomId") == room_id]
-if len(SeatAllocation_rows) > capacity:
-    print(f"[FAIL] more allocations ({len(SeatAllocation_rows)}) than room capacity ({capacity})")
-    sys.exit(1)
-
-# 10) Check: at most one student per seat
-allocations_by_seat = {}
-for a in SeatAllocation_rows:
-    sid = a.get("seatId")
-    if sid not in allocations_by_seat:
-        allocations_by_seat[sid] = []
-    allocations_by_seat[sid].append(a.get("studentId"))
-dup_seat = [sid for sid, ids in allocations_by_seat.items() if len(set(ids)) > 1]
-if dup_seat:
-    print(f"[FAIL] duplicate seats: {dup_seat}")
-    sys.exit(1)
-
-print("\n=== PASS: no duplicate seats on exam", exam_id, "===")
-0
+if __name__ == "__main__":
+    sys.exit(main())

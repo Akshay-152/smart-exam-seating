@@ -274,14 +274,6 @@ public class AllocationController {
         return Map.of("unpublished", unpublished);
     }
 
-    /** Hides a published chart again (moves allocations back to draft). */
-    @PostMapping("/allocations/{examId}/unpublish")
-    public Map<String, Object> unpublishAllocations(@PathVariable Long examId) {
-        int unpublished = allocationService.unpublishAllocations(examId);
-        auditService.record(actor(), "ALLOCATION_UNPUBLISHED", "exam:" + examId, unpublished + " allocation(s) hidden.");
-        return Map.of("unpublished", unpublished);
-    }
-
     /** Stored allocations (admin view); filters: examId, studentId, status. */
     @GetMapping("/allocations")
     public List<Map<String, Object>> listAllocations(@RequestParam(required = false) Long examId,

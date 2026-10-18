@@ -108,10 +108,18 @@ public class Exam {
     public Integer getDurationMinutes() { return durationMinutes != null ? durationMinutes : deriveDuration(); }
     public void setDurationMinutes(Integer durationMinutes) { this.durationMinutes = durationMinutes; }
 
-    /** Recomputed whenever the start or end time changes; null when unknown. */
+    /**
+     * Recomputed whenever the start or end time changes; null when unknown.
+     *
+     * <p>Returns early instead of using a ternary: mixing {@code int} and
+     * {@code Integer} in one conditional expression would unbox the (possibly
+     * null) stored value, so a request whose end time is before its start time
+     * used to fail with a NullPointerException instead of being validated.
+     */
     private Integer deriveDuration() {
         if (examTime == null || endTime == null) return durationMinutes;
         int minutes = (int) java.time.Duration.between(examTime, endTime).toMinutes();
-        return minutes > 0 ? minutes : durationMinutes;
+        if (minutes > 0) return minutes;
+        return durationMinutes;
     }
 }

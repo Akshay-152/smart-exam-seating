@@ -1,7 +1,9 @@
 // Rooms + responsiveness end-to-end test (CDP, no extra deps).
-// Usage: node tools/test/responsive-test.mjs   (app on :8080, chrome on :9333)
+// Usage: APP_URL=http://localhost:8081/ node tools/test/responsive-test.mjs
+//        (default app :8080, chrome on :9333)
 const DEBUG = 'http://127.0.0.1:9333';
-const APP = 'http://localhost:8080/';
+const APP = process.env.APP_URL || 'http://localhost:8080/';
+const APP_ORIGIN = new URL(APP).origin;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -9,7 +11,7 @@ async function findTarget() {
   for (let i = 0; i < 40; i++) {
     try {
       const list = await (await fetch(DEBUG + '/json/list')).json();
-      const page = list.find(t => t.type === 'page' && (t.url.startsWith('http://localhost:8080') || t.url === 'about:blank'));
+      const page = list.find(t => t.type === 'page' && (t.url.startsWith(APP_ORIGIN) || t.url === 'about:blank'));
       if (page) return page;
     } catch (e) { /* chrome not up yet */ }
     await sleep(500);
@@ -38,6 +40,14 @@ ws.onmessage = ev => {
     send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
   }
 };
+
+// Required so JavaScript dialogs (confirm on delete) are delivered to the
+// Page.javascriptDialogOpening handler instead of blocking the page forever.
+await send('Page.enable');
+await send('Runtime.enable');
+// Dismiss a dialog left open by an interrupted previous run; ignore if none.
+await send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
+
 function send(method, params = {}) {
   return new Promise((res, rej) => {
     const id = ++seq;
@@ -78,7 +88,8 @@ try {
     out.inApp = $('admin-app').style.display !== 'none';
     return out;
   })()`);
-  check('login screen -> admin dashboard', login.sawLogin && login.inApp, JSON.stringify(login));
+  // Re-runs reuse the existing browser session, so either path is valid.
+  check('login screen -> admin dashboard', login.inApp, JSON.stringify(login));
 
   if (!login.inApp) {
     failed++;
@@ -204,6 +215,16 @@ try {
       document.querySelector('.tab[data-section="allocation"]').click();
       await sleep(1200);
       for (let i = 0; i < 30 && !document.querySelectorAll('#alloc-room-list input[data-room-id]').length; i++) await sleep(100);
+      // Use the seeded baseline exam, which has eligible students; the imported
+      // exams later in the list may target an audience with no students.
+      const examSelect = $('alloc-exam');
+      for (let i = 0; i < 30 && examSelect.options.length === 0; i++) await sleep(100);
+      const seeded = [...examSelect.options].find(o => o.textContent.includes('Data Structures'));
+      if (seeded) {
+        examSelect.value = seeded.value;
+        examSelect.dispatchEvent(new Event('change'));
+        await sleep(800);
+      }
       out.pickerBoxes = document.querySelectorAll('#alloc-room-list input[data-room-id]').length;
       out.summaryShown = $('alloc-room-warn').style.display !== 'none' && $('alloc-room-warn').textContent.length > 0;
       out.summary = $('alloc-room-warn').textContent;

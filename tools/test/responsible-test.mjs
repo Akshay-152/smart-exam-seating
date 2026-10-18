@@ -1,7 +1,9 @@
 // responsible.md end-to-end QA (CDP, no extra deps).
-// Usage: node tools/test/responsible-test.mjs  (app on :8080, chrome on :9333)
+// Usage: APP_URL=http://localhost:8081/ node tools/test/responsible-test.mjs
+//        (default app :8080, chrome on :9333)
 const DEBUG = 'http://127.0.0.1:9333';
-const APP = 'http://localhost:8080/';
+const APP = process.env.APP_URL || 'http://localhost:8080/';
+const APP_ORIGIN = new URL(APP).origin;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -9,7 +11,7 @@ async function findTarget() {
   for (let i = 0; i < 40; i++) {
     try {
       const list = await (await fetch(DEBUG + '/json/list')).json();
-      const page = list.find(t => t.type === 'page' && (t.url.startsWith('http://localhost:8080') || t.url === 'about:blank'));
+      const page = list.find(t => t.type === 'page' && (t.url.startsWith(APP_ORIGIN) || t.url === 'about:blank'));
       if (page) return page;
     } catch (e) { /* chrome not up yet */ }
     await sleep(500);
@@ -103,6 +105,9 @@ try {
       const out = {};
       document.querySelector('.tab[data-section="calendar"]').click();
       await sleep(1200);
+      // Move to the month that contains the seeded exam (the current month may
+      // legitimately have no exams), so the chip/detail checks are meaningful.
+      window.calMove(1); await sleep(500);
       out.monthCells = document.querySelectorAll('#cal-grid .cal-day').length;
       out.chips = document.querySelectorAll('#cal-grid .cal-chip').length;
       out.title = $('cal-title').textContent;
@@ -278,7 +283,7 @@ try {
       const out = {};
       out.sawLogin = $('login-screen').style.display !== 'none';
       // find a student roll number from the public exam API is not allowed; use a seeded one
-      const rolls = ['S3-001', '23CS001', '23CS002', '1'];
+      const rolls = ['101', '102', 'S3-001', '23CS001', '23CS002', '1'];
       for (const roll of rolls) {
         $('login-username').value = roll; $('login-password').value = roll;
         $('login-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));

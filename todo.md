@@ -12,6 +12,44 @@ including admin login, no page errors) and `tools/test/responsive-test.mjs`
 **ALL RESPONSIVE TESTS PASSED** (rooms name/search/Select, allocation room
 picker, zero page-level horizontal overflow at 1920/1366/1024/768/390/320px).
 
+Update 2026-10-18 (full verification): a from-scratch build in an isolated copy
+(`mvn clean verify`, project `target/` untouched) produced the jar with **20 unit
+tests, 0 failures**, and the freshly built jar was run against an isolated H2
+database (the running MySQL dev instance on :8080 was left untouched):
+`exam-api-smoke.py` **20/20 PASS**, the repaired `duplicate-seat-test.py`
+**PASS** (no duplicate seat/student allocations, cleaned up after itself),
+`cdp-test.mjs` **ALL UI TESTS PASSED** (40 checks, no page errors),
+`responsive-test.mjs` **ALL RESPONSIVE TESTS PASSED** (57 checks, no page errors)
+and `responsible-test.mjs` **ALL RESPONSIBLE-MD CHECKS PASSED**. Test tooling also
+fixed: `seed.sh` now signs in and sends CSRF (it was failing every POST with 403),
+`duplicate-seat-test.py` no longer crashes on a `NameError`, and the two UI
+suites accept `APP_URL` and enable CDP dialogs (confirm prompts previously hung).
+
+Update 2026-10-18 (documentation sync): `PROJECT_DETAILS.md`, `README.md` and
+`database.md` were re-checked against the source. The stale "authentication is not
+implemented", "no `src/test` folder", single-`index.html` frontend and `Admin`
+entity claims are gone: the docs now describe Spring Security with JSON login,
+the admin/student portals (`index.html` + `app.js`), exam lifecycle and eligibility,
+draft/published allocations, the full API surface, the 13 entities and the actual
+test suites. Verified again with `mvn test` = **20 tests, 0 failures**.
+
+Update 2026-10-18 (repair): the committed sources did not compile. Duplicate/incomplete
+methods in `ExamController` (`addExam`, `updateExam`, `deleteExam`, plus throws of the
+checked `javax.security.auth.login.AccountException`) and a duplicated
+`unpublishAllocations` in `AllocationController` were removed; the redundant admin
+re-check in `ExamController` is gone because `SecurityConfig` already restricts
+`/api/exams/**` to `ROLE_ADMIN`. Two further defects were found and fixed while
+covering the code with tests: `GET /api/exams?status=...` threw
+`UnsupportedOperationException` (sorting an immutable `toList()`), and an exam whose
+end time precedes its start time threw a `NullPointerException` from
+`Exam.deriveDuration()` instead of a readable 400. Verified with a genuine from-scratch
+build (`target/classes` removed first — the earlier `BUILD SUCCESS` came from Maven's
+stale incremental compile): `mvn test` = **20 tests, 0 failures**
+(`ExamControllerTest`, `ConflictServiceTest`, `RoomImportServiceTest`), and
+`python tools/test/exam-api-smoke.py` = **ALL EXAM API CHECKS PASSED** (20 checks over
+HTTP against MySQL: validation, draft/publish/cancel lifecycle, delete guard,
+eligibility round-trip). See `things done.md` for the analysis.
+
 Update 2026-10-15: the room import form moved from the **Rooms** tab to the
 **Import Data → Rooms** tab (all file uploads now live on the Import Data
 dashboard). Verified: 39-check UI suite passes, and a CSV uploaded through the
@@ -91,7 +129,7 @@ Rooms tab.
 
 - [x] MySQL configured as the default database; local MySQL 8 available via
       `docker-compose.yml`, with connection settings documented in `database.md`
-- [x] Entities/models verified: `Student`, `Batch`, `Exam`, `Room`, `Seat` (+ `Admin` stub)
+- [x] Entities/models verified: `Student`, `User`, `Batch`, `Exam`, `ExamEligibility`, `ExamRoom`, `Room`, `Seat`, `SeatAllocation`, `Announcement`, `AuditLog`, `Department`, `Subject`
 - [x] Repositories verified (`findByRollNo`, `countByBatch`, `findByExamId`, …)
 - [x] Services verified (allocation, imports, conflicts, batches, PDF)
 - [x] Tables/relationships verified (student ↔ seat ↔ room ↔ exam; batch names
@@ -122,7 +160,7 @@ Rooms tab.
 - [x] PDF generation + final PDF data (header, roster and seat cells verified from extracted text)
 - [x] Room grid defaults: Students/Desk defaults to 3; desk prediction stays wide
       & shallow (3–4 rows max: 12→3×4, 24→3×8, 20→4×5, 36→3×12)
-- [x] Existing functionality: full CDP UI suite — ALL TESTS PASSED (39 checks, no page errors)
+- [x] Existing functionality: full CDP UI suite — ALL TESTS PASSED (40 checks, no page errors)
 - [x] Room file import (PDF/Excel/CSV) works from its new home, the
       **Import Data → Rooms** tab: upload → counts/preview shown → rooms appear
       on the Rooms tab (CSV fixture, `2 new / 0 invalid`)
@@ -132,7 +170,7 @@ Rooms tab.
       with total-capacity warning, and `roomIds` honored (inactive rooms
       filtered server-side) — all covered by `tools/test/responsive-test.mjs`
 - [x] Authentication & admin/student login (role-based dashboards, BCrypt
-      passwords, forced student password change, sessions, CSRF, rate limiting,
+      passwords, first-login password-change prompt, sessions, CSRF, rate limiting,
       audit log) — verified end to end in `things done.md` and both UI suites
 
 ## Remaining / not part of the requirements  `[ ] Pending`

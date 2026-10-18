@@ -27,13 +27,14 @@ PDF that includes the student list with Roll Number, Name, Branch and Batch.
 - **PDF export** — landscape A4 seating chart (colour-coded by branch·batch)
   with a full **Student List** table: Roll No | Name | Branch | Batch/Course |
   Room | Seat.
-- **Single-page admin UI** — Dashboard, Students, Rooms, Courses, Exams,
-  Seating Chart and Import tabs.
+- **Two role-based portals** — an administrator SPA (Dashboard, Students, Rooms,
+  Courses, Exams, Seating Chart, Import Data, Calendar, Reports, Announcements,
+  Settings) and a student portal (Overview, My Exams, My Seat, Profile).
 - **Authentication & roles** — server-side login for the administrator and for
-  every student (roll number as initial password, password change required on
-  first login, BCrypt hashes), session cookies, CSRF protection, login rate
-  limiting and an audit trail of admin actions. Students can only read their
-  own records; every admin API rejects student sessions.
+  every student (roll number as initial password, a banner prompting a password
+  change on first login, BCrypt hashes), session cookies, CSRF protection, login
+  rate limiting and an audit trail of admin actions. Students can only access
+  their own records; every admin API rejects student sessions.
 - **Room management** — optional room **name** (dash shown when empty),
   building/floor, live **search** by number/name/building, an availability
   **Select** checkbox persisted in MySQL and enforced by the allocator
@@ -53,7 +54,7 @@ PDF that includes the student list with Roll Number, Name, Branch and Batch.
 | Database  | MySQL 8 by default (Docker Compose); MySQL/PostgreSQL drivers included |
 | PDF       | Apache PDFBox 2.0.31 (generation **and** text extraction for import) |
 | Excel     | Apache POI 5.2.5 |
-| Frontend  | Single-page HTML/CSS/vanilla JS served from `src/main/resources/static/index.html` |
+| Frontend  | Single-page HTML/CSS/vanilla JS served from `src/main/resources/static/` (`index.html` + `app.js`) |
 | Build     | Maven (`./.mvn-tool/apache-maven-3.9.9/bin/mvn` bundled) |
 
 ## Run it
@@ -104,22 +105,34 @@ to override its MySQL connection settings. See `database.md` for details.
 ```bash
 # Unit tests (JUnit + Mockito — runs on Java 25; Byte Buddy / Mockito are
 # pinned in pom.xml to versions that support class-file version 69)
+# 20 tests: ExamControllerTest, ConflictServiceTest, RoomImportServiceTest
 ./.mvn-tool/apache-maven-3.9.9/bin/mvn test
 
-# Seed baseline data (app must be running on :8081)
+# Exam API smoke test over HTTP against a running server (20 checks)
+python tools/test/exam-api-smoke.py http://localhost:8080
+
+# Duplicate-seat guarantee (self-contained: creates and cleans up its own data)
+python tools/test/duplicate-seat-test.py http://localhost:8080
+
+# Seed baseline data (signs in as admin and handles CSRF; app on :8081)
 bash tools/test/seed.sh http://localhost:8081/api
 
 # End-to-end UI suite through Chrome DevTools Protocol (signs in as admin first)
 # (start Chrome first: chrome.exe --headless=new --remote-debugging-port=9333 --user-data-dir=%TEMP%/chrome-test http://localhost:8081/)
 node tools/test/cdp-test.mjs
 
-# Rooms + responsiveness suite (app on :8080): room name/search/Select,
-# allocation room picker, and horizontal-overflow sweep at 1920→320px
+# Rooms + responsiveness suite: room name/search/Select, allocation room
+# picker, and horizontal-overflow sweep at 1920→320px (default app :8080)
 node tools/test/responsive-test.mjs
+
+# Accessibility/responsive/auth UX suite (same APP_URL override works)
+APP_URL=http://localhost:8081/ node tools/test/responsible-test.mjs
 ```
 
 Fixture generators live next to the tests: `make_xlsx.py`, `make_exam_xlsx.py`,
-`MakePdf.java`, `MakeExamPdf.java`.
+`MakePdf.java`, `MakeExamPdf.java`. `tools/test/responsible-test.mjs` covers the
+accessibility/responsive/auth UX checks, and `duplicate-seat-test.py` verifies no
+seat is allocated twice.
 
 ## Documentation
 
